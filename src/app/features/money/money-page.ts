@@ -1,4 +1,5 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
 import { MoneyCategoryStatus } from '../../core/models/money.model';
 import { MONEY_FALLBACK } from '../../core/fallbacks/money.fallback';
@@ -7,6 +8,7 @@ import { BudgetsApiService } from '../../core/services/budgets-api.service';
 import { DebtsApiService } from '../../core/services/debts-api.service';
 import { SavingsApiService } from '../../core/services/savings-api.service';
 import { SettingsApiService } from '../../core/services/settings-api.service';
+import { QuickCreateEventsService } from '../../core/services/quick-create-events.service';
 import { mapMoneyView } from '../../core/mappers/api.mapper';
 import { catchError, forkJoin, map, of } from 'rxjs';
 
@@ -420,6 +422,8 @@ export class MoneyPage {
   private readonly debtsApi = inject(DebtsApiService);
   private readonly savingsApi = inject(SavingsApiService);
   private readonly settingsApi = inject(SettingsApiService);
+  private readonly quickCreateEvents = inject(QuickCreateEventsService);
+  private readonly destroyRef = inject(DestroyRef);
   protected readonly tabs = ['Presupuesto activo', 'Deuda', 'Ahorro'];
   protected get paycheck() { return this.view().paycheck; }
   protected get upcomingPayments() { return this.view().upcomingPayments; }
@@ -429,9 +433,15 @@ export class MoneyPage {
   protected get recentExpenses() { return this.view().recentExpenses; }
 
   constructor() {
+    this.loadMoneyView();
+    this.quickCreateEvents.expenseCreated$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadMoneyView());
+  }
+
+  private loadMoneyView(): void {
     forkJoin({ categories: this.moneyApi.getCategories(), expenses: this.moneyApi.getExpenses(), budget: this.budgetsApi.getCurrentBudget(), debts: this.debtsApi.getDebts(), goals: this.savingsApi.getGoals(), settings: this.settingsApi.getSettings() }).pipe(
       map(({ categories, expenses, budget, debts, goals, settings }) => mapMoneyView(categories, expenses, budget, debts, goals, settings)),
       catchError(() => of(MONEY_FALLBACK)),
+      takeUntilDestroyed(this.destroyRef),
     ).subscribe((view) => this.view.set(view));
   }
 

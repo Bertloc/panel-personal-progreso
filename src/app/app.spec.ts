@@ -5,9 +5,10 @@ import { getHeatmapValueFromDay } from './core/utils/heatmap.util';
 import { HomePage } from './features/home/home-page';
 import { AppCurrencyPipe } from './shared/pipes/app-currency.pipe';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { mapHeatmapDays } from './core/mappers/api.mapper';
 import { toNumber } from './core/utils/number.util';
+import { QuickCreate } from './shared/components/quick-create/quick-create';
 
 describe('App', () => {
   beforeEach(async () => {
@@ -21,6 +22,34 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
     expect(app).toBeTruthy();
+  });
+
+  it('should open all six quick actions from the floating button', () => {
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+    const mainButton: HTMLButtonElement = fixture.nativeElement.querySelector('.main');
+
+    mainButton.click();
+    fixture.detectChanges();
+
+    expect(mainButton.getAttribute('aria-expanded')).toBe('true');
+    expect(fixture.nativeElement.querySelectorAll('.action')).toHaveLength(6);
+  });
+
+  it('should send a valid expense through the existing money endpoint', () => {
+    const fixture = TestBed.createComponent(QuickCreate);
+    fixture.componentRef.setInput('action', 'expense');
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('http://localhost:3000/api/money/categories').flush({ data: [{ id: 'food', name: 'Comida', type: 'expense' }] });
+    fixture.componentInstance.form.patchValue({ categoryId: 'food', amount: 95, date: '2026-06-29', note: 'Prueba desde UI', paymentMethod: 'cash' });
+
+    fixture.componentInstance.save();
+
+    const request = http.expectOne('http://localhost:3000/api/money/expenses');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({ categoryId: 'food', amount: 95, expenseDate: '2026-06-29', note: 'Prueba desde UI', source: 'manual', paymentMethod: 'cash' });
+    request.flush({ id: 'expense-1', amount: 95 });
   });
 
   it('should prepare 84 valid heatmap days', () => {

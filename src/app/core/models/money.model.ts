@@ -4,6 +4,7 @@ import { SavingsGoal } from './savings.model';
 export interface MoneyCategoryApi {
   id: string;
   name: string;
+  type?: 'expense' | 'income' | string;
   color?: string;
   spent?: string | number;
   used?: string | number;
@@ -20,6 +21,7 @@ export interface ExpenseApi {
   description?: string;
   name?: string;
   date?: string;
+  expenseDate?: string;
   createdAt?: string;
   category?: MoneyCategoryApi;
   categoryName?: string;

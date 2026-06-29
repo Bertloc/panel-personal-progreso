@@ -63,7 +63,7 @@ export function mapMoneyView(categories: MoneyCategoryApi[], expenses: ExpenseAp
   };
   const upcomingPayments: PaymentItem[] = debt ? [{ name: debt.name ?? 'Deuda', amount: debtInfo.nextPayment, dueLabel: debtInfo.date }] : [];
   const savingsGoals: SavingsGoal[] = goals.map((goal, index) => ({ name: goal.name, current: toNumber(goal.currentAmount ?? goal.current), target: toNumber(goal.targetAmount ?? goal.target), tone: (['purple', 'green', 'blue'] as const)[index % 3] }));
-  const recentExpenses: RecentExpense[] = expenses.slice(0, 5).map((expense) => ({ name: expense.category?.name ?? expense.categoryName ?? expense.name ?? expense.description ?? 'Gasto', amount: toNumber(expense.amount), day: formatRelativeDay(expense.date ?? expense.createdAt) }));
+  const recentExpenses: RecentExpense[] = expenses.slice(0, 5).map((expense) => ({ name: expense.category?.name ?? expense.categoryName ?? expense.name ?? expense.description ?? 'Gasto', amount: toNumber(expense.amount), day: formatRelativeDay(expense.expenseDate ?? expense.date ?? expense.createdAt) }));
   return { paycheck, upcomingPayments, debtInfo, categories: mappedCategories, savingsGoals, recentExpenses };
 }
 
