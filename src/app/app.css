@@ -1,0 +1,24 @@
+:host {
+  display: block;
+  min-height: 100dvh;
+}
+
+.app-shell {
+  position: relative;
+  width: min(100%, 460px);
+  min-height: 100dvh;
+  margin-inline: auto;
+  background: var(--color-background-secondary);
+  border-inline: 1px solid var(--color-border);
+}
+
+.app-content {
+  min-height: 100dvh;
+  padding: 32px 20px 164px;
+}
+
+@media (max-width: 459px) {
+  .app-shell {
+    border-inline: 0;
+  }
+}
