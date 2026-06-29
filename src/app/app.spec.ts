@@ -4,12 +4,16 @@ import { App } from './app';
 import { getHeatmapValueFromDay } from './core/utils/heatmap.util';
 import { HomePage } from './features/home/home-page';
 import { AppCurrencyPipe } from './shared/pipes/app-currency.pipe';
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { mapHeatmapDays } from './core/mappers/api.mapper';
+import { toNumber } from './core/utils/number.util';
 
 describe('App', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideRouter([])],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
     }).compileComponents();
   });
 
@@ -49,5 +53,13 @@ describe('App', () => {
     expect(day.score).toBe(4);
     expect(day.value).toBe(4);
     expect(day.status).toBe('excellent');
+  });
+
+  it('should normalize API numbers and pad heatmap days', () => {
+    const heatmap = mapHeatmapDays([{ id: 'one', value: '9' }], 2);
+
+    expect(toNumber('2372.85')).toBe(2372.85);
+    expect(toNumber('invalid')).toBe(0);
+    expect(heatmap.map(({ value }) => value)).toEqual([4, 0]);
   });
 });

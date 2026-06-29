@@ -1,31 +1,10 @@
-import { Component } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
-
-type SummaryCard = {
-  label: string;
-  value: string;
-  copy: string;
-};
-
-type ProjectBudget = {
-  name: string;
-  spent: number;
-  limit: number;
-};
-
-type PriorityTask = {
-  name: string;
-  done: boolean;
-  priority: 'Alta' | 'Media' | 'Baja';
-};
-
-type ProjectCard = {
-  name: string;
-  status: string;
-  progress: number;
-  tasks: string;
-  tone: 'purple' | 'blue' | 'green';
-};
+import { PriorityTask, ProjectCard } from '../../core/models/projects.model';
+import { PROJECTS_FALLBACK } from '../../core/fallbacks/projects.fallback';
+import { ProjectsApiService } from '../../core/services/projects-api.service';
+import { mapProjectsView } from '../../core/mappers/api.mapper';
+import { catchError, forkJoin, map, of, switchMap } from 'rxjs';
 
 @Component({
   selector: 'app-projects-page',
@@ -49,17 +28,17 @@ type ProjectCard = {
       </section>
 
       <section class="surface-card featured-card">
-        <span class="status-badge status-badge--purple">Desarrollo</span>
-        <h2 class="featured-title">App personal</h2>
-        <p class="section-card-copy">Siguiente: Construir Home UI</p>
+        <span class="status-badge status-badge--purple">{{ featured.status }}</span>
+        <h2 class="featured-title">{{ featured.name }}</h2>
+        <p class="section-card-copy">Siguiente: {{ featured.next }}</p>
 
         <div class="split-line split-line--bottom">
           <span class="section-card-copy">Progreso</span>
-          <strong>68%</strong>
+          <strong>{{ featured.progress }}%</strong>
         </div>
 
         <div class="progress-track" aria-hidden="true">
-          <span class="progress-fill progress-fill--purple" style="width: 68%"></span>
+          <span class="progress-fill progress-fill--purple" [style.width.%]="featured.progress"></span>
         </div>
 
         <button class="featured-button" type="button">Continuar</button>
@@ -197,29 +176,24 @@ type ProjectCard = {
   `,
 })
 export class ProjectsPage {
-  protected readonly summaryCards: SummaryCard[] = [
-    { label: 'Activos', value: '3 proyectos', copy: '2 cerca de terminar' },
-    { label: 'Tiempo', value: '14.5h', copy: 'esta semana' },
-  ];
+  private readonly view = signal(PROJECTS_FALLBACK);
+  private readonly projectsApi = inject(ProjectsApiService);
+  protected get summaryCards() { return this.view().summaryCards; }
+  protected get projectBudgets() { return this.view().projectBudgets; }
+  protected get priorityTasks() { return this.view().priorityTasks; }
+  protected get projects() { return this.view().projects; }
+  protected get featured() { return this.view().featured ?? PROJECTS_FALLBACK.featured!; }
 
-  protected readonly projectBudgets: ProjectBudget[] = [
-    { name: 'Hosting', spent: 42.5, limit: 50 },
-    { name: 'Design Assets', spent: 120, limit: 150 },
-  ];
-
-  protected readonly priorityTasks: PriorityTask[] = [
-    { name: 'Crear estructura Angular', done: true, priority: 'Baja' },
-    { name: 'Construir Home UI', done: false, priority: 'Alta' },
-    { name: 'Hacer pantalla Dinero', done: false, priority: 'Alta' },
-    { name: 'Crear heatmap anual', done: false, priority: 'Media' },
-    { name: 'Definir mock data real', done: false, priority: 'Media' },
-  ];
-
-  protected readonly projects: ProjectCard[] = [
-    { name: 'App Finanzas Personal', status: 'En progreso', progress: 68, tasks: '4/6 tareas', tone: 'purple' },
-    { name: 'Web Rentara', status: 'Activo', progress: 45, tasks: '3/7 tareas', tone: 'blue' },
-    { name: 'Curso Angular', status: 'Aprendiendo', progress: 30, tasks: '2/5 tareas', tone: 'green' },
-  ];
+  constructor() {
+    this.projectsApi.getProjects().pipe(
+      switchMap((projects) => {
+        const active = projects.filter((project) => project.status === 'active');
+        return active.length ? forkJoin({ projects: of(projects), active: of(active), tasks: forkJoin(active.map((project) => this.projectsApi.getProjectTasks(project.id))), budgets: forkJoin(active.map((project) => this.projectsApi.getProjectBudgets(project.id))) }) : of({ projects, active, tasks: [], budgets: [] });
+      }),
+      map(({ projects, active, tasks, budgets }) => mapProjectsView(projects, Object.fromEntries(active.map((project, index) => [project.id, tasks[index] ?? []])), Object.fromEntries(active.map((project, index) => [project.id, budgets[index] ?? []])))),
+      catchError(() => of(PROJECTS_FALLBACK)),
+    ).subscribe((view) => this.view.set(view));
+  }
 
   protected getProgressPercent(used: number, limit: number): number {
     return Math.min(100, Math.round((used / limit) * 100));

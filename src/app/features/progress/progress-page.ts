@@ -1,11 +1,10 @@
-import { Component } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { HeatmapDay } from '../../core/models/home-summary.model';
-import { HEATMAP_FILTER_HINTS, createMockHeatmap } from '../../core/utils/heatmap.util';
-
-type ConsistencyMonth = {
-  name: string;
-  percent: number;
-};
+import { HEATMAP_FILTER_HINTS } from '../../core/utils/heatmap.util';
+import { PROGRESS_FALLBACK } from '../../core/fallbacks/progress.fallback';
+import { ProgressApiService } from '../../core/services/progress-api.service';
+import { mapProgressView } from '../../core/mappers/api.mapper';
+import { catchError, forkJoin, map, of } from 'rxjs';
 
 @Component({
   selector: 'app-progress-page',
@@ -29,9 +28,9 @@ type ConsistencyMonth = {
         <div class="card-head">
           <div>
             <h2 class="section-card-title">Actividad 2026</h2>
-            <p class="section-card-copy">168 días activos</p>
+            <p class="section-card-copy">{{ activeDays }} días activos</p>
           </div>
-          <span class="status-badge status-badge--orange">14 días</span>
+          <span class="status-badge status-badge--orange">{{ streak }} días</span>
         </div>
 
         <div class="month-labels">
@@ -47,7 +46,7 @@ type ConsistencyMonth = {
         </div>
 
         <div class="split-line split-line--bottom heatmap-footer">
-          <p class="section-card-copy">45% consistencia</p>
+          <p class="section-card-copy">{{ consistency }}% consistencia</p>
           <div class="legend">
             <span>Less</span>
             <i class="heatmap-cell heatmap-box heatmap-cell--0"></i>
@@ -63,14 +62,14 @@ type ConsistencyMonth = {
       <section class="mini-grid">
         <article class="surface-card compact-card">
           <p class="card-label">Racha más larga</p>
-          <strong class="metric-value">48</strong>
+          <strong class="metric-value">{{ longestStreak }}</strong>
           <p class="card-meta">días seguidos</p>
         </article>
 
         <article class="surface-card compact-card">
           <p class="card-label">Mejor mes</p>
-          <strong class="metric-value">Mayo</strong>
-          <p class="card-meta">28 días activos</p>
+          <strong class="metric-value">{{ bestMonth }}</strong>
+          <p class="card-meta">{{ bestMonthDays }} días activos</p>
         </article>
       </section>
 
@@ -189,6 +188,8 @@ type ConsistencyMonth = {
   `,
 })
 export class ProgressPage {
+  private readonly view = signal(PROGRESS_FALLBACK);
+  private readonly progressApi = inject(ProgressApiService);
   protected readonly filters = [
     { id: 'general', label: 'General', hint: HEATMAP_FILTER_HINTS.general },
     { id: 'habits', label: 'Hábitos', hint: HEATMAP_FILTER_HINTS.habits },
@@ -198,15 +199,21 @@ export class ProgressPage {
   ];
 
   protected readonly monthLabels = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun'];
-  protected readonly heatmap = createMockHeatmap(126);
-  protected readonly monthlyConsistency: ConsistencyMonth[] = [
-    { name: 'Enero', percent: 64 },
-    { name: 'Febrero', percent: 71 },
-    { name: 'Marzo', percent: 80 },
-    { name: 'Abril', percent: 76 },
-    { name: 'Mayo', percent: 93 },
-    { name: 'Junio', percent: 82 },
-  ];
+  protected get heatmap() { return this.view().heatmap; }
+  protected get activeDays() { return this.view().activeDays; }
+  protected get streak() { return this.view().streak; }
+  protected get consistency() { return this.view().consistency; }
+  protected get longestStreak() { return this.view().longestStreak; }
+  protected get bestMonth() { return this.view().bestMonth; }
+  protected get bestMonthDays() { return this.view().bestMonthDays; }
+  protected get monthlyConsistency() { return this.view().monthlyConsistency; }
+
+  constructor() {
+    forkJoin({ heatmap: this.progressApi.getHeatmap('general', 2026), today: this.progressApi.getTodayProgress() }).pipe(
+      map(({ heatmap, today }) => mapProgressView(heatmap, today)),
+      catchError(() => of(PROGRESS_FALLBACK)),
+    ).subscribe((view) => this.view.set(view));
+  }
 
   protected getHeatmapClass(value: HeatmapDay['value']): string {
     return `heatmap-cell heatmap-cell--${value}`;

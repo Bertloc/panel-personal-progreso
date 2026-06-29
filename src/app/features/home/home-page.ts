@@ -1,8 +1,11 @@
-import { Component } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { HomeSummary } from '../../core/models/home-summary.model';
-import { createMockHeatmap } from '../../core/utils/heatmap.util';
 import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
+import { HOME_FALLBACK } from '../../core/fallbacks/home.fallback';
+import { DashboardApiService } from '../../core/services/dashboard-api.service';
+import { mapDashboardSummaryToHomeSummary } from '../../core/mappers/api.mapper';
+import { catchError, map, of } from 'rxjs';
 
 @Component({
   selector: 'app-home-page',
@@ -226,34 +229,17 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
   `,
 })
 export class HomePage {
-  readonly homeSummary: HomeSummary = {
-    userName: 'Humberto',
-    date: 'SÁBADO, 28 JUNIO 2026',
-    availableToday: 126,
-    resetHours: 14,
-    weeklySpent: 187,
-    weeklyRemaining: 93,
-    weeklyLimit: 280,
-    monthlySpent: 743,
-    monthlyLimit: 1200,
-    saved: 0,
-    savingsLabel: 'meta inicial',
-    debtLeft: 10015,
-    debtLabel: 'banco',
-    nextDebtDate: '15 julio',
-    nextDebtPayment: 2372.85,
-    debtProgress: 68,
-    suggestedExtraPayment: 500,
-    activeDays: 168,
-    streak: 14,
-    habits: [
-      { id: 'breakfast', name: 'Desayunar', done: true },
-      { id: 'expense', name: 'Registrar gasto', done: false },
-      { id: 'meal-plan', name: 'Comer dentro del plan', done: false },
-      { id: 'gym', name: 'Gym', done: false },
-    ],
-    heatmap: createMockHeatmap(84),
-  };
+  private readonly summary = signal<HomeSummary>(HOME_FALLBACK);
+  private readonly dashboardApi = inject(DashboardApiService);
+
+  constructor() {
+    this.dashboardApi.getSummary().pipe(
+      map(mapDashboardSummaryToHomeSummary),
+      catchError(() => of(HOME_FALLBACK)),
+    ).subscribe((summary) => this.summary.set(summary));
+  }
+
+  get homeSummary(): HomeSummary { return this.summary(); }
 
   protected getProgressPercent(used: number, limit: number): number {
     return Math.min(100, Math.round((used / limit) * 100));

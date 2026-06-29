@@ -1,43 +1,14 @@
-import { Component } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
-
-type MoneyCategoryStatus =
-  | 'OK'
-  | 'Cuidado'
-  | 'Excedido'
-  | 'Apartado'
-  | 'Pagado'
-  | 'Pendiente'
-  | 'Próximo'
-  | 'En pausa';
-
-type MoneyCategory = {
-  name: string;
-  used: number;
-  limit: number;
-  tone: 'green' | 'blue' | 'orange' | 'red' | 'pink' | 'purple';
-  status: MoneyCategoryStatus;
-};
-
-type PaymentItem = {
-  name: string;
-  amount: number;
-  dueLabel: string;
-  suffix?: string;
-};
-
-type SavingsGoal = {
-  name: string;
-  current: number;
-  target: number;
-  tone: 'green' | 'blue' | 'purple';
-};
-
-type RecentExpense = {
-  name: string;
-  amount: number;
-  day: string;
-};
+import { MoneyCategoryStatus } from '../../core/models/money.model';
+import { MONEY_FALLBACK } from '../../core/fallbacks/money.fallback';
+import { MoneyApiService } from '../../core/services/money-api.service';
+import { BudgetsApiService } from '../../core/services/budgets-api.service';
+import { DebtsApiService } from '../../core/services/debts-api.service';
+import { SavingsApiService } from '../../core/services/savings-api.service';
+import { SettingsApiService } from '../../core/services/settings-api.service';
+import { mapMoneyView } from '../../core/mappers/api.mapper';
+import { catchError, forkJoin, map, of } from 'rxjs';
 
 @Component({
   selector: 'app-money-page',
@@ -443,57 +414,26 @@ type RecentExpense = {
   `,
 })
 export class MoneyPage {
+  private readonly view = signal(MONEY_FALLBACK);
+  private readonly moneyApi = inject(MoneyApiService);
+  private readonly budgetsApi = inject(BudgetsApiService);
+  private readonly debtsApi = inject(DebtsApiService);
+  private readonly savingsApi = inject(SavingsApiService);
+  private readonly settingsApi = inject(SettingsApiService);
   protected readonly tabs = ['Presupuesto activo', 'Deuda', 'Ahorro'];
+  protected get paycheck() { return this.view().paycheck; }
+  protected get upcomingPayments() { return this.view().upcomingPayments; }
+  protected get debtInfo() { return this.view().debtInfo; }
+  protected get categories() { return this.view().categories; }
+  protected get savingsGoals() { return this.view().savingsGoals; }
+  protected get recentExpenses() { return this.view().recentExpenses; }
 
-  protected readonly paycheck = {
-    income: 4730,
-    debt: 2372.85,
-    gym: 450,
-    nutritionist: 490,
-    foodWeekly: 700,
-    transportPerDay: 20,
-    transportDays: 7,
-  };
-
-  protected readonly upcomingPayments: PaymentItem[] = [
-    { name: 'Deuda bancaria', amount: 2372.85, dueLabel: '15 julio' },
-    { name: 'Gym', amount: 450, dueLabel: '19 julio' },
-    { name: 'Nutriólogo', amount: 490, dueLabel: 'julio' },
-    { name: 'Transporte', amount: 20, dueLabel: 'semanal', suffix: '/día' },
-  ];
-
-  protected readonly debtInfo = {
-    left: 10015,
-    nextPayment: 2372.85,
-    date: '15 julio',
-    progress: 68,
-    extra: 500,
-    bankPlan: 'diciembre',
-    aggressivePlan: 'septiembre',
-  };
-
-  protected readonly categories: MoneyCategory[] = [
-    { name: 'Comida', used: 380, limit: 700, tone: 'green', status: 'OK' },
-    { name: 'Transporte', used: 120, limit: 280, tone: 'blue', status: 'OK' },
-    { name: 'Gym', used: 450, limit: 450, tone: 'purple', status: 'Apartado' },
-    { name: 'Nutriólogo', used: 0, limit: 490, tone: 'orange', status: 'Pendiente' },
-    { name: 'Ocio', used: 230, limit: 250, tone: 'orange', status: 'Cuidado' },
-    { name: 'Ahorro', used: 0, limit: 300, tone: 'purple', status: 'En pausa' },
-    { name: 'Deuda', used: 0, limit: 2372.85, tone: 'purple', status: 'Próximo' },
-    { name: 'Imprevistos', used: 95, limit: 140, tone: 'pink', status: 'OK' },
-  ];
-
-  protected readonly savingsGoals: SavingsGoal[] = [
-    { name: 'Colchón inicial', current: 0, target: 1000, tone: 'purple' },
-    { name: 'Fondo de emergencia', current: 0, target: 3000, tone: 'green' },
-    { name: 'Laptop', current: 0, target: 12000, tone: 'blue' },
-  ];
-
-  protected readonly recentExpenses: RecentExpense[] = [
-    { name: 'Transporte', amount: 20, day: 'Hoy' },
-    { name: 'Comida', amount: 95, day: 'Hoy' },
-    { name: 'Ocio', amount: 45, day: 'Ayer' },
-  ];
+  constructor() {
+    forkJoin({ categories: this.moneyApi.getCategories(), expenses: this.moneyApi.getExpenses(), budget: this.budgetsApi.getCurrentBudget(), debts: this.debtsApi.getDebts(), goals: this.savingsApi.getGoals(), settings: this.settingsApi.getSettings() }).pipe(
+      map(({ categories, expenses, budget, debts, goals, settings }) => mapMoneyView(categories, expenses, budget, debts, goals, settings)),
+      catchError(() => of(MONEY_FALLBACK)),
+    ).subscribe((view) => this.view.set(view));
+  }
 
   protected get fixedReserved(): number {
     return this.paycheck.debt + this.paycheck.gym + this.paycheck.nutritionist;

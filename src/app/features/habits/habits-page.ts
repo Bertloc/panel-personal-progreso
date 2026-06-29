@@ -1,17 +1,8 @@
-import { Component } from '@angular/core';
-
-type HabitItem = {
-  name: string;
-  done: boolean;
-  streak: number;
-};
-
-type HabitSection = {
-  title: string;
-  time: string;
-  icon: string;
-  habits: HabitItem[];
-};
+import { Component, inject, signal } from '@angular/core';
+import { HABITS_FALLBACK } from '../../core/fallbacks/habits.fallback';
+import { mapHabitsView } from '../../core/mappers/api.mapper';
+import { HabitsApiService } from '../../core/services/habits-api.service';
+import { catchError, map, of } from 'rxjs';
 
 @Component({
   selector: 'app-habits-page',
@@ -34,8 +25,8 @@ type HabitSection = {
 
         <div>
           <h2 class="section-card-title">Vamos en marcha</h2>
-          <p class="section-card-copy">5 de 10 hábitos hechos</p>
-          <p class="hero-streak">14 días de racha</p>
+          <p class="section-card-copy">{{ completed }} de {{ total }} hábitos hechos</p>
+          <p class="hero-streak">{{ streak }} días de racha</p>
         </div>
       </section>
 
@@ -150,39 +141,15 @@ type HabitSection = {
   `,
 })
 export class HabitsPage {
-  protected readonly progress = 50;
+  private readonly view = signal(HABITS_FALLBACK);
+  private readonly habitsApi = inject(HabitsApiService);
+  protected get progress() { return this.view().progress; }
+  protected get completed() { return this.view().completed; }
+  protected get total() { return this.view().total; }
+  protected get streak() { return this.view().streak; }
+  protected get sections() { return this.view().sections; }
 
-  protected readonly sections: HabitSection[] = [
-    {
-      title: 'Mañana',
-      time: '6am - 12pm',
-      icon: 'Sol',
-      habits: [
-        { name: 'Desayunar', done: true, streak: 14 },
-        { name: 'Ir a la escuela', done: true, streak: 8 },
-        { name: 'Registrar transporte', done: false, streak: 3 },
-      ],
-    },
-    {
-      title: 'Tarde',
-      time: '12pm - 6pm',
-      icon: 'Día',
-      habits: [
-        { name: 'Comer dentro del plan', done: false, streak: 5 },
-        { name: 'Trabajar', done: true, streak: 12 },
-        { name: 'Registrar comida', done: false, streak: 22 },
-      ],
-    },
-    {
-      title: 'Noche',
-      time: '6pm - 11pm',
-      icon: 'Luna',
-      habits: [
-        { name: 'Gym', done: false, streak: 4 },
-        { name: 'Cenar', done: false, streak: 7 },
-        { name: 'Revisar presupuesto', done: false, streak: 2 },
-        { name: 'Dormir', done: false, streak: 0 },
-      ],
-    },
-  ];
+  constructor() {
+    this.habitsApi.getTodayHabits().pipe(map(mapHabitsView), catchError(() => of(HABITS_FALLBACK))).subscribe((view) => this.view.set(view));
+  }
 }
