@@ -28,7 +28,7 @@ import { AppCurrencyPipe } from '../../../shared/pipes/app-currency.pipe';
         <div class="actions">@if (editingId()) { <button class="secondary" type="button" (click)="reset()">Cancelar</button> }<button type="submit" [disabled]="form.invalid || saving()">{{ editingId() ? 'Actualizar' : 'Agregar pago' }}</button></div>
       </form>
       @if (error()) { <p class="error">{{ error() }}</p> }
-      @if (loading()) { <p class="empty">Cargando pagos…</p> } @else {
+      @if (loading()) { <p class="empty">Cargando pagos…</p> } @else if (!error()) {
         <div class="items">
           @for (payment of payments(); track payment.id) {
             <article class="item"><div class="item-head"><strong>{{ payment.name }}</strong><strong>{{ paymentAmount(payment) | appCurrency }}</strong></div><p class="meta">{{ payment.frequency }} · {{ payment.nextDueDate || (payment.dueDay ? 'día ' + payment.dueDay : 'sin fecha') }}</p><div class="actions"><button class="secondary" type="button" (click)="edit(payment)">Editar</button><button class="danger" type="button" (click)="remove(payment)">Eliminar</button></div></article>
@@ -67,5 +67,5 @@ export class RecurringPaymentsManager {
   protected edit(payment: RecurringPayment) { this.editingId.set(payment.id); this.form.patchValue({ name: payment.name, amount: this.paymentAmount(payment), frequency: payment.frequency, dueDay: payment.dueDay ?? null, nextDueDate: payment.nextDueDate?.slice(0, 10) ?? '', categoryId: payment.categoryId ?? '', isFixed: payment.isFixed, notes: payment.notes ?? '' }); }
   protected reset() { this.editingId.set(null); this.form.reset({ name: '', amount: 0, frequency: 'monthly', dueDay: null, nextDueDate: '', categoryId: '', isFixed: true, notes: '' }); }
   protected remove(payment: RecurringPayment) { if (!confirm(`¿Eliminar ${payment.name}?`)) return; this.api.deleteRecurringPayment(payment.id).subscribe({ next: () => { this.events.notifyMoneyChanged(); this.load(); }, error: () => this.error.set('No se pudo eliminar el pago.') }); }
-  private load() { this.loading.set(true); forkJoin({ payments: this.api.getRecurringPayments(), categories: this.money.getCategories() }).pipe(finalize(() => this.loading.set(false))).subscribe({ next: ({ payments, categories }) => { this.payments.set(payments); this.categories.set(categories.filter(({ isActive }) => isActive !== false)); }, error: () => this.error.set('No se pudieron cargar los pagos recurrentes.') }); }
+  private load() { this.loading.set(true); this.error.set(''); forkJoin({ payments: this.api.getRecurringPayments(), categories: this.money.getCategories() }).pipe(finalize(() => this.loading.set(false))).subscribe({ next: ({ payments, categories }) => { this.payments.set(payments); this.categories.set(categories.filter(({ isActive }) => isActive !== false)); }, error: () => this.error.set('No se pudieron cargar los pagos recurrentes.') }); }
 }

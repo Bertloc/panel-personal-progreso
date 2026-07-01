@@ -26,12 +26,16 @@ export interface MoneyCategoryApi {
 
 export interface ExpenseApi {
   id: string;
+  categoryId?: string;
   amount: string | number;
   description?: string;
   name?: string;
   date?: string;
   expenseDate?: string;
   createdAt?: string;
+  note?: string | null;
+  source?: string | null;
+  paymentMethod?: string | null;
   category?: MoneyCategoryApi;
   categoryName?: string;
 }

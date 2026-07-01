@@ -1,4 +1,7 @@
 import { HeatmapDay, TodayHabit } from './home-summary.model';
+import { DebtApi } from './debts.model';
+import { RecurringPayment } from './recurring-payment.model';
+import { SavingsGoalApi } from './savings.model';
 
 export interface DashboardSummary {
   userName?: string;
@@ -18,6 +21,17 @@ export interface DashboardSummary {
   nextDebtPayment?: string | number;
   debtProgress?: string | number;
   suggestedExtraPayment?: string | number;
+  periodIncome?: string | number;
+  periodSpent?: string | number;
+  budgetRemaining?: string | number;
+  currentMonthExpenses?: string | number;
+  currentWeekExpenses?: string | number;
+  totalDebt?: string | number;
+  totalSavingsGoal?: string | number;
+  upcomingPayments?: RecurringPayment[];
+  activeDebts?: DebtApi[];
+  activeSavingsGoals?: SavingsGoalApi[];
+  habitsToday?: TodayHabit[];
   activeDays?: string | number;
   streak?: string | number;
   habits?: TodayHabit[];

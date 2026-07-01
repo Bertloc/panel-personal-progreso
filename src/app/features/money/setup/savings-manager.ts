@@ -24,7 +24,7 @@ import { AppCurrencyPipe } from '../../../shared/pipes/app-currency.pipe';
         <div class="actions">@if (editingId()) { <button class="secondary" type="button" (click)="reset()">Cancelar</button> }<button type="submit" [disabled]="form.invalid || saving()">{{ editingId() ? 'Actualizar' : 'Crear meta' }}</button></div>
       </form>
       @if (error()) { <p class="error">{{ error() }}</p> }
-      @if (loading()) { <p class="empty">Cargando metas…</p> } @else {
+      @if (loading()) { <p class="empty">Cargando metas…</p> } @else if (!error()) {
         <div class="items">
           @for (goal of goals(); track goal.id) {
             <article class="item"><div class="item-head"><strong>{{ goal.name }}</strong><strong>{{ current(goal) | appCurrency }} / {{ target(goal) | appCurrency }}</strong></div><div class="progress-track"><span class="progress-fill progress-fill--green" [style.width.%]="progress(goal)"></span></div><p class="meta">{{ progress(goal) }}% · {{ goal.targetDate || 'sin fecha objetivo' }}</p><div class="actions"><button class="secondary" type="button" (click)="edit(goal)">Editar</button><button class="danger" type="button" (click)="remove(goal)">Eliminar</button></div></article>
@@ -53,5 +53,5 @@ export class SavingsManager {
   protected edit(goal: SavingsGoalApi) { this.editingId.set(goal.id); this.form.patchValue({ name: goal.name, targetAmount: this.target(goal), currentAmount: this.current(goal), targetDate: goal.targetDate?.slice(0, 10) ?? '', priority: goal.priority ?? 'medium', notes: goal.notes ?? '' }); }
   protected reset() { this.editingId.set(null); this.form.reset({ name: '', targetAmount: 0, currentAmount: 0, targetDate: '', priority: 'medium', notes: '' }); }
   protected remove(goal: SavingsGoalApi) { if (!confirm(`¿Eliminar ${goal.name}?`)) return; this.api.deleteGoal(goal.id).subscribe({ next: () => { this.events.notifyMoneyChanged(); this.load(); }, error: () => this.error.set('No se pudo eliminar la meta.') }); }
-  private load() { this.loading.set(true); this.api.getGoals().pipe(finalize(() => this.loading.set(false))).subscribe({ next: (goals) => this.goals.set(goals), error: () => this.error.set('No se pudieron cargar las metas.') }); }
+  private load() { this.loading.set(true); this.error.set(''); this.api.getGoals().pipe(finalize(() => this.loading.set(false))).subscribe({ next: (goals) => this.goals.set(goals), error: () => this.error.set('No se pudieron cargar las metas.') }); }
 }

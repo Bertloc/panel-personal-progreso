@@ -12,9 +12,9 @@ import { QuickCreateEventsService } from '../../../core/services/quick-create-ev
   template: `
     <div class="manager">
       <div><h2>Presupuesto</h2><p class="meta">Asigna un límite a tus categorías de gasto.</p></div>
-      @if (loading()) { <p class="empty">Cargando presupuesto…</p> } @else if (!limits().length) {
+      @if (loading()) { <p class="empty">Cargando presupuesto…</p> } @else if (!error() && !limits().length) {
         <p class="empty">Primero crea categorías de gasto para asignar presupuesto.</p>
-      } @else {
+      } @else if (!error()) {
         <form [formGroup]="form" (ngSubmit)="save()">
           <div class="field-grid">
             <label class="full">Nombre <input formControlName="name" placeholder="Presupuesto quincenal" /></label>
@@ -77,7 +77,7 @@ export class BudgetManager {
   }
 
   private load() {
-    this.loading.set(true);
+    this.loading.set(true); this.error.set('');
     forkJoin({ categories: this.money.getCategories({ type: 'expense' }), budget: this.budgets.getCurrentBudget() })
       .pipe(finalize(() => this.loading.set(false))).subscribe({
         next: ({ categories, budget }) => {

@@ -1,11 +1,16 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { catchError, map, of, tap } from 'rxjs';
 import { HOME_FALLBACK } from '../../core/fallbacks/home.fallback';
 import { mapDashboardSummaryToHomeSummary } from '../../core/mappers/api.mapper';
 import { HomeSummary } from '../../core/models/home-summary.model';
+import { RoutineSummary } from '../../core/models/routine.model';
 import { DashboardApiService } from '../../core/services/dashboard-api.service';
 import { OnboardingStateService } from '../../core/services/onboarding-state.service';
+import { QuickCreateEventsService } from '../../core/services/quick-create-events.service';
+import { RoutineEventsService } from '../../core/services/routine-events.service';
+import { RoutinesApiService } from '../../core/services/routines-api.service';
 import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
 
 @Component({
@@ -42,7 +47,7 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
           <article class="surface-card compact-card"><p class="card-label">Ahorrado</p><strong class="value-green">{{ homeSummary.saved | appCurrency }}</strong><p class="card-meta">{{ homeSummary.savingsLabel }}</p></article>
           <article class="surface-card compact-card"><p class="card-label">Deuda</p><strong>{{ homeSummary.debtLeft | appCurrency }}</strong><p class="card-meta">{{ homeSummary.debtLabel }}</p></article>
         </section>
-      } @else {
+      } @else if (!apiError()) {
         <section class="surface-card setup-card">
           <h2 class="section-card-title">Tu base ya está lista</h2>
           <p class="section-card-copy">Configura tu dinero para calcular tu disponible de hoy.</p>
@@ -50,15 +55,19 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
         </section>
       }
 
-      @if (homeSummary.habits.length) {
-        <section class="surface-card">
-          <div class="card-head"><h2 class="section-card-title">Hábitos de hoy</h2><a class="card-link" routerLink="/habits">Ver todo</a></div>
-          <div class="list-card">
-            @for (habit of homeSummary.habits; track habit.id) {
-              <div class="list-row"><span class="habit-check" [class.habit-check--done]="habit.done"></span><span class="habit-name">{{ habit.name }}</span><span class="habit-state">{{ habit.done ? 'Listo' : 'Pendiente' }}</span></div>
-            }
-          </div>
-        </section>
+      @if (routineError()) {
+        <p class="api-error" role="status">No pudimos cargar tu rutina.</p>
+      } @else if (routineSummary(); as routine) {
+        @if (routine.today.total) {
+          <section class="surface-card routine-card">
+            <div class="card-head"><h2 class="section-card-title">Rutina de hoy</h2><a class="card-link" routerLink="/routine">Ver rutina</a></div>
+            <strong>{{ routine.today.done }}/{{ routine.today.total }} completadas · {{ routine.today.completionPercent }}%</strong>
+            <p class="card-meta">Racha: {{ routine.streak.current }} días</p>
+            <div class="progress-track"><span class="progress-fill progress-fill--green" [style.width.%]="routine.today.completionPercent"></span></div>
+          </section>
+        } @else {
+          <section class="surface-card setup-card"><h2 class="section-card-title">Rutina de hoy</h2><p class="section-card-copy">Configura tu rutina para ver tu progreso diario.</p><a class="card-link" routerLink="/routine/setup">Crear rutina →</a></section>
+        }
       }
 
       @if (homeSummary.activeDays || homeSummary.streak) {
@@ -74,7 +83,7 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
   `,
   styles: `
     .hero-card { padding: 22px; background: radial-gradient(circle at top right, rgb(74 222 128 / .2), transparent 42%), linear-gradient(180deg, rgb(18 36 24 / .96), rgb(18 21 29)); border-color: rgb(74 222 128 / .22); }
-    .card-label, .hero-note, .card-meta, .habit-state { margin: 0; color: var(--color-text-secondary); }
+    .card-label, .hero-note, .card-meta { margin: 0; color: var(--color-text-secondary); }
     .hero-amount { display: block; margin-top: 8px; font-size: clamp(3.1rem, 14vw, 4.5rem); line-height: .92; letter-spacing: -.08em; color: var(--color-green); }
     .hero-meta { display: grid; gap: 4px; margin: 22px 0 14px; }
     .meta-accent, .accent-copy { margin: 0; color: var(--color-green); }
@@ -82,6 +91,7 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
     .compact-card strong { display: block; margin: 6px 0 4px; font-size: 1.15rem; }
     .value-green { color: var(--color-green); }
     .setup-card { display: grid; gap: 12px; background: linear-gradient(180deg, rgb(35 29 65 / .7), var(--color-card)); }
+    .routine-card { display: grid; gap: 12px; }
     .api-error { margin: 0; padding: 12px 14px; border-radius: 14px; background: rgb(255 77 109 / .12); color: var(--color-red); }
     .list-row:first-child { padding-top: 0; } .list-row:last-child { padding-bottom: 0; border-bottom: 0; }
     .heatmap-preview { display: grid; grid-template-columns: repeat(12, 1fr); gap: 5px; margin-top: 8px; }
@@ -93,15 +103,33 @@ export class HomePage {
   private readonly summary = signal<HomeSummary>(HOME_FALLBACK);
   private readonly dashboardApi = inject(DashboardApiService);
   private readonly onboarding = inject(OnboardingStateService);
+  private readonly events = inject(QuickCreateEventsService);
+  private readonly routinesApi = inject(RoutinesApiService);
+  private readonly routineEvents = inject(RoutineEventsService);
+  private readonly destroyRef = inject(DestroyRef);
   protected readonly apiError = signal(false);
+  protected readonly routineSummary = signal<RoutineSummary | null>(null);
+  protected readonly routineError = signal(false);
   protected readonly today = new Intl.DateTimeFormat('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date()).toUpperCase();
 
   constructor() {
+    this.loadSummary();
+    this.loadRoutineSummary();
+    this.events.moneyChanged$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadSummary());
+    this.routineEvents.changed$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadRoutineSummary());
+  }
+
+  private loadSummary() {
     this.dashboardApi.getSummary().pipe(
       map(mapDashboardSummaryToHomeSummary),
       tap(() => this.apiError.set(false)),
       catchError(() => { this.apiError.set(true); return of(HOME_FALLBACK); }),
+      takeUntilDestroyed(this.destroyRef),
     ).subscribe((summary) => this.summary.set(summary));
+  }
+
+  private loadRoutineSummary() {
+    this.routinesApi.getSummary().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (summary) => { this.routineError.set(false); this.routineSummary.set(summary); }, error: () => { this.routineError.set(true); this.routineSummary.set(null); } });
   }
 
   get homeSummary() { return this.summary(); }

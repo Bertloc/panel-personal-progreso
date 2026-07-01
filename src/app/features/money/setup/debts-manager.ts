@@ -26,7 +26,7 @@ import { AppCurrencyPipe } from '../../../shared/pipes/app-currency.pipe';
         <div class="actions">@if (editingId()) { <button class="secondary" type="button" (click)="reset()">Cancelar</button> }<button type="submit" [disabled]="form.invalid || saving()">{{ editingId() ? 'Actualizar' : 'Agregar deuda' }}</button></div>
       </form>
       @if (error()) { <p class="error">{{ error() }}</p> }
-      @if (loading()) { <p class="empty">Cargando deudas…</p> } @else {
+      @if (loading()) { <p class="empty">Cargando deudas…</p> } @else if (!error()) {
         <div class="items">
           @for (debt of debts(); track debt.id) {
             <article class="item"><div class="item-head"><strong>{{ debt.name }}</strong><strong>{{ currentAmount(debt) | appCurrency }}</strong></div><p class="meta">Mínimo: {{ minimumPayment(debt) | appCurrency }} · {{ debt.strategy || 'sin estrategia' }} · {{ debt.progressPercent ?? debt.progress ?? 0 }}%</p><div class="actions"><button class="secondary" type="button" (click)="edit(debt)">Editar</button><button class="danger" type="button" (click)="remove(debt)">Eliminar</button></div></article>
@@ -60,5 +60,5 @@ export class DebtsManager {
   protected edit(debt: DebtApi) { this.editingId.set(debt.id); this.form.patchValue({ name: debt.name ?? '', initialAmount: Number(debt.initialAmount ?? debt.originalAmount ?? debt.totalAmount ?? 0), currentAmount: this.currentAmount(debt), minimumPayment: Number(debt.minimumPayment ?? 0), paymentDay: debt.paymentDay ?? null, strategy: debt.strategy ?? 'bank_plan', priority: debt.priority ?? 'medium', notes: debt.notes ?? '' }); }
   protected reset() { this.editingId.set(null); this.form.reset({ name: '', initialAmount: 0, currentAmount: 0, minimumPayment: 0, paymentDay: null, strategy: 'bank_plan', priority: 'medium', notes: '' }); }
   protected remove(debt: DebtApi) { if (!confirm(`¿Eliminar ${debt.name || 'esta deuda'}?`)) return; this.api.deleteDebt(debt.id).subscribe({ next: () => { this.events.notifyMoneyChanged(); this.load(); }, error: () => this.error.set('No se pudo eliminar la deuda.') }); }
-  private load() { this.loading.set(true); this.api.getDebts().pipe(finalize(() => this.loading.set(false))).subscribe({ next: (debts) => this.debts.set(debts), error: () => this.error.set('No se pudieron cargar las deudas.') }); }
+  private load() { this.loading.set(true); this.error.set(''); this.api.getDebts().pipe(finalize(() => this.loading.set(false))).subscribe({ next: (debts) => this.debts.set(debts), error: () => this.error.set('No se pudieron cargar las deudas.') }); }
 }

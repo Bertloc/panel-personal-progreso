@@ -1,0 +1,28 @@
+:host { display: block; }
+.section-stack, form, .items { display: grid; gap: 16px; }
+h2, p { margin: 0; }
+form { padding: 16px; border: 1px solid var(--color-border); border-radius: 18px; background: #0c0f15; }
+label { display: grid; gap: 7px; color: var(--color-text-secondary); font-size: .84rem; font-weight: 650; }
+input, select, textarea { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-background-secondary); color: var(--color-text); font: inherit; color-scheme: dark; }
+textarea { resize: vertical; }
+.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+legend { margin-bottom: 8px; color: var(--color-text-secondary); font-size: .84rem; font-weight: 650; }
+.days { display: flex; flex-wrap: wrap; gap: 8px; }
+.days button, .days span { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid var(--color-border); border-radius: 50%; background: transparent; color: var(--color-text-secondary); }
+.days button { cursor: pointer; }
+.days button.active, .days.compact span { border-color: rgb(74 222 128 / .35); background: rgb(74 222 128 / .12); color: var(--color-green); }
+.days.compact span { width: 28px; height: 28px; font-size: .72rem; }
+.check { display: flex; align-items: center; }
+.check input { width: 20px; min-height: 20px; accent-color: var(--color-green); }
+.routine-card, .item { display: grid; gap: 12px; padding: 16px; }
+.routine-card.selected { border-color: rgb(124 109 255 / .5); }
+.item-head, .actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.meta { color: var(--color-text-secondary); font-size: .84rem; }
+button { min-height: 40px; padding: 9px 13px; border: 0; border-radius: 12px; background: var(--color-purple); color: white; cursor: pointer; font-weight: 750; }
+button.secondary { border: 1px solid var(--color-border); background: transparent; color: var(--color-text-secondary); }
+button.danger { background: rgb(255 77 109 / .14); color: var(--color-red); }
+button:disabled { cursor: not-allowed; opacity: .5; }
+.empty, .error { margin: 0; padding: 14px; border-radius: 14px; color: var(--color-text-secondary); background: rgb(255 255 255 / .04); }
+.error { color: var(--color-red); background: rgb(255 77 109 / .12); }
+@media (max-width: 380px) { .field-grid { grid-template-columns: 1fr; } .actions { flex-wrap: wrap; } }

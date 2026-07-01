@@ -62,7 +62,7 @@ export class BottomNav {
   protected readonly items = [
     { label: 'Inicio', icon: '\u2302', route: '/' },
     { label: 'Dinero', icon: '\u25A3', route: '/money' },
-    { label: 'Hábitos', icon: '\u2713', route: '/habits' },
+    { label: 'Rutina', icon: '\u2713', route: '/routine' },
     { label: 'Progreso', icon: '\u25C7', route: '/progress' },
     { label: 'Proyectos', icon: '\u25A4', route: '/projects' },
   ];

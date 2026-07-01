@@ -26,17 +26,25 @@ export function mapHeatmapDays(days: HeatmapApiDay[], length: number): HeatmapDa
 }
 
 export function mapDashboardSummaryToHomeSummary(source: DashboardSummary): HomeSummary {
+  const debt = source.activeDebts?.[0];
+  const originalDebt = toNumber(debt?.initialAmount ?? debt?.originalAmount ?? debt?.totalAmount);
+  const debtLeft = toNumber(source.debtLeft ?? source.totalDebt ?? debt?.currentAmount ?? debt?.remainingAmount);
+  const periodSpent = toNumber(source.periodSpent ?? source.weeklySpent);
+  const budgetRemaining = toNumber(source.budgetRemaining ?? source.weeklyRemaining);
+  const saved = source.saved === undefined
+    ? (source.activeSavingsGoals ?? []).reduce((total, goal) => total + toNumber(goal.currentAmount ?? goal.current), 0)
+    : toNumber(source.saved);
   return {
     ...HOME_FALLBACK,
     userName: source.userName ?? HOME_FALLBACK.userName,
     date: source.date ?? HOME_FALLBACK.date,
     availableToday: toNumber(source.availableToday), resetHours: toNumber(source.resetHours),
-    weeklySpent: toNumber(source.weeklySpent), weeklyRemaining: toNumber(source.weeklyRemaining), weeklyLimit: toNumber(source.weeklyLimit),
-    monthlySpent: toNumber(source.monthlySpent), monthlyLimit: toNumber(source.monthlyLimit), saved: toNumber(source.saved),
-    savingsLabel: source.savingsLabel ?? HOME_FALLBACK.savingsLabel, debtLeft: toNumber(source.debtLeft), debtLabel: source.debtLabel ?? HOME_FALLBACK.debtLabel,
-    nextDebtDate: source.nextDebtDate ?? HOME_FALLBACK.nextDebtDate, nextDebtPayment: toNumber(source.nextDebtPayment), debtProgress: clampPercent(source.debtProgress),
+    weeklySpent: toNumber(source.weeklySpent ?? source.currentWeekExpenses ?? periodSpent), weeklyRemaining: budgetRemaining, weeklyLimit: toNumber(source.weeklyLimit) || periodSpent + budgetRemaining,
+    monthlySpent: toNumber(source.monthlySpent ?? source.currentMonthExpenses), monthlyLimit: toNumber(source.monthlyLimit) || periodSpent + budgetRemaining, saved,
+    savingsLabel: source.savingsLabel ?? source.activeSavingsGoals?.[0]?.name ?? HOME_FALLBACK.savingsLabel, debtLeft, debtLabel: source.debtLabel ?? debt?.name ?? HOME_FALLBACK.debtLabel,
+    nextDebtDate: source.nextDebtDate ?? debt?.nextPaymentDate ?? HOME_FALLBACK.nextDebtDate, nextDebtPayment: toNumber(source.nextDebtPayment ?? debt?.minimumPayment), debtProgress: source.debtProgress === undefined && originalDebt ? clampPercent(((originalDebt - debtLeft) / originalDebt) * 100) : clampPercent(source.debtProgress),
     suggestedExtraPayment: toNumber(source.suggestedExtraPayment), activeDays: toNumber(source.activeDays), streak: toNumber(source.streak),
-    habits: source.habits ?? [], heatmap: source.heatmap ? mapHeatmapDays(source.heatmap, 84) : HOME_FALLBACK.heatmap,
+    habits: source.habits ?? source.habitsToday ?? [], heatmap: source.heatmap ? mapHeatmapDays(source.heatmap, 84) : HOME_FALLBACK.heatmap,
   };
 }
 

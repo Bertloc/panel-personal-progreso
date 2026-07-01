@@ -192,7 +192,7 @@ export class ProgressPage {
   private readonly progressApi = inject(ProgressApiService);
   protected readonly filters = [
     { id: 'general', label: 'General', hint: HEATMAP_FILTER_HINTS.general },
-    { id: 'habits', label: 'Hábitos', hint: HEATMAP_FILTER_HINTS.habits },
+    { id: 'habits', label: 'Rutina', hint: HEATMAP_FILTER_HINTS.habits },
     { id: 'money', label: 'Dinero', hint: HEATMAP_FILTER_HINTS.money },
     { id: 'savings', label: 'Ahorro', hint: HEATMAP_FILTER_HINTS.savings },
     { id: 'debt', label: 'Deuda', hint: HEATMAP_FILTER_HINTS.debt },

@@ -13,7 +13,7 @@ import { QuickCreateEventsService } from '../../core/services/quick-create-event
 import { IncomeApiService } from '../../core/services/income-api.service';
 import { RecurringPaymentsApiService } from '../../core/services/recurring-payments-api.service';
 import { mapMoneyView } from '../../core/mappers/api.mapper';
-import { catchError, forkJoin, map, merge, of, tap } from 'rxjs';
+import { catchError, forkJoin, map, of, tap } from 'rxjs';
 
 @Component({
   selector: 'app-money-page',
@@ -32,6 +32,7 @@ import { catchError, forkJoin, map, merge, of, tap } from 'rxjs';
         <p class="api-error" role="status">No pudimos cargar tus datos de dinero. Intenta de nuevo más tarde.</p>
       }
 
+      <div class="money-data" [class.money-data--hidden]="apiError()">
       <section class="pill-row">
         @for (tab of tabs; track tab) {
           <button class="pill" type="button" [class.pill--active]="tab === 'Presupuesto activo'">
@@ -207,6 +208,7 @@ import { catchError, forkJoin, map, merge, of, tap } from 'rxjs';
           }
         </div>
       </section>
+      </div>
     </div>
   `,
   styles: `
@@ -218,6 +220,8 @@ import { catchError, forkJoin, map, merge, of, tap } from 'rxjs';
     }
 
     .setup-link { display: inline-flex; width: fit-content; padding: 10px 14px; border-radius: 12px; background: var(--color-purple); color: white; text-decoration: none; font-weight: 750; }
+    .money-data { display: contents; }
+    .money-data--hidden { display: none; }
 
     .api-error,
     .empty-state {
@@ -430,7 +434,7 @@ export class MoneyPage {
 
   constructor() {
     this.loadMoneyView();
-    merge(this.quickCreateEvents.expenseCreated$, this.quickCreateEvents.moneyChanged$).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadMoneyView());
+    this.quickCreateEvents.moneyChanged$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadMoneyView());
   }
 
   private loadMoneyView(): void {

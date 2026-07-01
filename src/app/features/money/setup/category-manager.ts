@@ -26,7 +26,7 @@ import { QuickCreateEventsService } from '../../../core/services/quick-create-ev
         </div>
       </form>
       @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
-      @if (loading()) { <p class="empty">Cargando categorías…</p> } @else {
+      @if (loading()) { <p class="empty">Cargando categorías…</p> } @else if (!error()) {
         <div class="items">
           @for (category of categories(); track category.id) {
             <article class="item">

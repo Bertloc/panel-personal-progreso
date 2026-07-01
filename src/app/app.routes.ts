@@ -20,10 +20,24 @@ export const routes: Routes = [
       import('./features/money/money-page').then((m) => m.MoneyPage),
   },
   {
-    path: 'habits',
+    path: 'routine/setup',
     canActivate: [onboardingGuard],
-    loadComponent: () =>
-      import('./features/habits/habits-page').then((m) => m.HabitsPage),
+    loadComponent: () => import('./features/habits/routine-setup-page').then((m) => m.RoutineSetupPage),
+  },
+  {
+    path: 'habits/setup',
+    redirectTo: 'routine/setup',
+    pathMatch: 'full',
+  },
+  {
+    path: 'routine',
+    canActivate: [onboardingGuard],
+    loadComponent: () => import('./features/habits/habits-page').then((m) => m.HabitsPage),
+  },
+  {
+    path: 'habits',
+    redirectTo: 'routine',
+    pathMatch: 'full',
   },
   {
     path: 'progress',

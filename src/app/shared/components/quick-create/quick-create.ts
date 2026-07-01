@@ -1,29 +1,30 @@
 import { Component, DestroyRef, effect, inject, input, output, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { RouterLink } from '@angular/router';
 import { finalize, Observable } from 'rxjs';
 import { DebtApi } from '../../../core/models/debts.model';
-import { HabitApi } from '../../../core/models/habits.model';
+import { IncomeSource } from '../../../core/models/income.model';
 import { MoneyCategoryApi } from '../../../core/models/money.model';
 import { SavingsGoalApi } from '../../../core/models/savings.model';
 import { DebtsApiService } from '../../../core/services/debts-api.service';
-import { HabitsApiService } from '../../../core/services/habits-api.service';
+import { IncomeApiService } from '../../../core/services/income-api.service';
 import { MoneyApiService } from '../../../core/services/money-api.service';
 import { ProjectsApiService } from '../../../core/services/projects-api.service';
 import { QuickCreateEventsService } from '../../../core/services/quick-create-events.service';
 import { SavingsApiService } from '../../../core/services/savings-api.service';
 import { ActionModal } from '../action-modal/action-modal';
 
-export type QuickAction = 'expense' | 'income' | 'debt-payment' | 'saving' | 'habit' | 'project';
+export type QuickAction = 'expense' | 'income' | 'debt-payment' | 'saving' | 'routine' | 'project';
 
 const ACTION_TITLES: Record<QuickAction, string> = {
   expense: 'Registrar gasto', income: 'Registrar ingreso', 'debt-payment': 'Pago de deuda',
-  saving: 'Movimiento de ahorro', habit: 'Registrar hábito', project: 'Nuevo proyecto',
+  saving: 'Movimiento de ahorro', routine: 'Rutina de hoy', project: 'Nuevo proyecto',
 };
 
 @Component({
   selector: 'app-quick-create',
-  imports: [ReactiveFormsModule, ActionModal],
+  imports: [ReactiveFormsModule, RouterLink, ActionModal],
   template: `
     <app-action-modal [title]="title" (close)="close.emit()">
       <form [formGroup]="form" (ngSubmit)="save()">
@@ -35,7 +36,9 @@ const ACTION_TITLES: Record<QuickAction, string> = {
                 @for (category of categories(); track category.id) { <option [value]="category.id">{{ category.name }}</option> }
               </select>
             </label>
-            @if (!loadingOptions() && !categories().length) { <p class="empty">Primero crea una categoría de gasto.</p> }
+            @if (!loadingOptions() && !error() && !categories().length) {
+              <p class="empty">Primero crea una categoría de gasto. <a routerLink="/money/setup" (click)="close.emit()">Ir a configurar dinero</a></p>
+            }
             <label>Monto <input formControlName="amount" type="number" min="0.01" step="0.01" inputmode="decimal"></label>
             <label>Fecha <input formControlName="date" type="date"></label>
             <label>Nota (opcional) <textarea formControlName="note" rows="2"></textarea></label>
@@ -44,31 +47,33 @@ const ACTION_TITLES: Record<QuickAction, string> = {
             </label>
           }
           @case ('income') {
+            <label>Fuente (opcional)
+              <select formControlName="sourceId"><option value="">Sin fuente</option>@for (source of incomeSources(); track source.id) { <option [value]="source.id">{{ source.name }}</option> }</select>
+            </label>
+            @if (!loadingOptions() && !error() && !incomeSources().length) { <p class="empty">Puedes registrar el ingreso manualmente o configurar una fuente.</p> }
             <label>Monto <input formControlName="amount" type="number" min="0.01" step="0.01"></label>
             <label>Fecha <input formControlName="date" type="date"></label>
-            <label>Tipo <select formControlName="type"><option value="paycheck">Quincena</option><option value="extra">Extra</option><option value="other">Otro</option></select></label>
+            <label>Tipo <select formControlName="type"><option value="regular">Regular</option><option value="extra">Extra</option><option value="adjustment">Ajuste</option><option value="other">Otro</option></select></label>
             <label>Nota (opcional) <textarea formControlName="note" rows="2"></textarea></label>
-            <p class="notice">Disponible próximamente.</p>
           }
           @case ('debt-payment') {
             <label>Deuda <select formControlName="targetId"><option value="">Selecciona una deuda</option>@for (debt of debts(); track debt.id) { <option [value]="debt.id">{{ debt.name || 'Deuda' }}</option> }</select></label>
+            @if (!loadingOptions() && !error() && !debts().length) { <p class="empty">Primero registra una deuda. <a routerLink="/money/setup" (click)="close.emit()">Ir a configurar dinero</a></p> }
             <label>Monto pagado <input formControlName="amount" type="number" min="0.01" step="0.01"></label>
             <label>Fecha <input formControlName="date" type="date"></label>
-            <label>Tipo <select formControlName="type"><option value="monthly">Pago mensual</option><option value="extra">Abono extra</option></select></label>
+            <label>Tipo <select formControlName="type"><option value="minimum">Pago mínimo</option><option value="extra">Abono extra</option><option value="adjustment">Ajuste</option></select></label>
             <label>Nota (opcional) <textarea formControlName="note" rows="2"></textarea></label>
           }
           @case ('saving') {
             <label>Meta de ahorro <select formControlName="targetId"><option value="">Selecciona una meta</option>@for (goal of goals(); track goal.id) { <option [value]="goal.id">{{ goal.name }}</option> }</select></label>
+            @if (!loadingOptions() && !error() && !goals().length) { <p class="empty">Primero crea una meta de ahorro. <a routerLink="/money/setup" (click)="close.emit()">Ir a configurar dinero</a></p> }
             <label>Monto <input formControlName="amount" type="number" min="0.01" step="0.01"></label>
             <label>Fecha <input formControlName="date" type="date"></label>
-            <label>Tipo <select formControlName="type"><option value="deposit">Aporte</option><option value="withdrawal">Retiro</option></select></label>
+            <label>Tipo <select formControlName="type"><option value="deposit">Aporte</option><option value="withdrawal">Retiro</option><option value="adjustment">Ajuste</option></select></label>
             <label>Nota (opcional) <textarea formControlName="note" rows="2"></textarea></label>
           }
-          @case ('habit') {
-            <label>Hábito <select formControlName="targetId"><option value="">Selecciona un hábito</option>@for (habit of habits(); track habit.id) { <option [value]="habit.id">{{ habit.name }}</option> }</select></label>
-            <label>Fecha <input formControlName="date" type="date"></label>
-            <label>Estado <select formControlName="status"><option value="completed">Hecho</option><option value="skipped">No hecho</option></select></label>
-            <label>Nota (opcional) <textarea formControlName="note" rows="2"></textarea></label>
+          @case ('routine') {
+            <p class="empty">Marca tus actividades desde <a routerLink="/routine" (click)="close.emit()">Rutina de hoy</a>.</p>
           }
           @case ('project') {
             <label>Nombre <input formControlName="name" type="text" maxlength="100"></label>
@@ -80,12 +85,12 @@ const ACTION_TITLES: Record<QuickAction, string> = {
 
         @if (loadingOptions()) { <p class="notice">Cargando opciones…</p> }
         @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
-        <div class="actions">
+        @if (action() !== 'routine') { <div class="actions">
           <button type="button" class="secondary" (click)="close.emit()">Cancelar</button>
-          <button type="submit" [disabled]="saving() || loadingOptions() || action() === 'income' || form.invalid">
+          <button type="submit" [disabled]="saving() || loadingOptions() || form.invalid">
             {{ saving() ? 'Guardando…' : 'Guardar' }}
           </button>
-        </div>
+        </div> }
       </form>
     </app-action-modal>
   `,
@@ -110,6 +115,7 @@ const ACTION_TITLES: Record<QuickAction, string> = {
     button:disabled { cursor: not-allowed; opacity: .5; }
     p { margin: 0; font-size: .84rem; }
     .notice, .empty { color: var(--color-text-secondary); }
+    .empty a { color: #b8beff; }
     .error { color: var(--color-red); }
   `,
 })
@@ -118,23 +124,23 @@ export class QuickCreate {
   readonly close = output<void>();
   readonly created = output<string>();
   readonly categories = signal<MoneyCategoryApi[]>([]);
+  readonly incomeSources = signal<IncomeSource[]>([]);
   readonly debts = signal<DebtApi[]>([]);
   readonly goals = signal<SavingsGoalApi[]>([]);
-  readonly habits = signal<HabitApi[]>([]);
   readonly saving = signal(false);
   readonly loadingOptions = signal(false);
   readonly error = signal('');
 
   private readonly destroyRef = inject(DestroyRef);
   private readonly moneyApi = inject(MoneyApiService);
+  private readonly incomeApi = inject(IncomeApiService);
   private readonly debtsApi = inject(DebtsApiService);
   private readonly savingsApi = inject(SavingsApiService);
-  private readonly habitsApi = inject(HabitsApiService);
   private readonly projectsApi = inject(ProjectsApiService);
   private readonly events = inject(QuickCreateEventsService);
 
   readonly form = new FormGroup({
-    categoryId: new FormControl(''), targetId: new FormControl(''), amount: new FormControl<number | null>(null),
+    categoryId: new FormControl(''), sourceId: new FormControl(''), targetId: new FormControl(''), amount: new FormControl<number | null>(null),
     date: new FormControl(today()), note: new FormControl(''), paymentMethod: new FormControl(''), type: new FormControl(''),
     status: new FormControl(''), name: new FormControl(''), description: new FormControl(''), priority: new FormControl(''),
   });
@@ -146,28 +152,29 @@ export class QuickCreate {
   get title(): string { return ACTION_TITLES[this.action()]; }
 
   save(): void {
-    if (this.form.invalid || this.saving() || this.action() === 'income') return;
+    if (this.form.invalid || this.saving()) return;
+    const action = this.action();
     const value = this.form.getRawValue();
     const amount = Number(value.amount);
     let request: Observable<unknown>;
     let message: string;
 
-    switch (this.action()) {
+    switch (action) {
       case 'expense':
         request = this.moneyApi.createExpense({ categoryId: value.categoryId, amount, expenseDate: value.date, note: value.note || undefined, source: 'manual', paymentMethod: value.paymentMethod || undefined });
-        message = 'Gasto guardado';
+        message = 'Gasto guardado.';
+        break;
+      case 'income':
+        request = this.incomeApi.createEvent({ sourceId: value.sourceId || undefined, amount, incomeDate: value.date, type: value.type, note: value.note || undefined });
+        message = 'Ingreso guardado.';
         break;
       case 'debt-payment':
-        request = this.debtsApi.createDebtPayment(value.targetId!, { amount, paymentDate: value.date, type: value.type, note: value.note || undefined });
-        message = 'Pago guardado';
+        request = this.debtsApi.createPayment(value.targetId!, { amount, paymentDate: value.date, type: value.type, note: value.note || undefined });
+        message = 'Pago registrado.';
         break;
       case 'saving':
         request = this.savingsApi.createMovement(value.targetId!, { amount, movementDate: value.date, type: value.type, note: value.note || undefined });
-        message = 'Movimiento guardado';
-        break;
-      case 'habit':
-        request = this.habitsApi.logHabit(value.targetId!, { logDate: value.date, status: value.status, note: value.note || undefined });
-        message = 'Hábito guardado';
+        message = 'Movimiento de ahorro guardado.';
         break;
       case 'project':
         request = this.projectsApi.createProject({ name: value.name, description: value.description || undefined, priority: value.priority || undefined, status: value.status });
@@ -180,11 +187,11 @@ export class QuickCreate {
     this.saving.set(true);
     request.pipe(finalize(() => this.saving.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
-        if (this.action() === 'expense') this.events.notifyExpenseCreated();
+        if (action === 'expense' || action === 'income' || action === 'debt-payment' || action === 'saving') this.events.notifyMoneyChanged(action);
         this.form.reset({ date: today() });
         this.created.emit(message);
       },
-      error: () => this.error.set('No se pudo guardar. Revisa la conexión e inténtalo de nuevo.'),
+      error: () => this.error.set('No se pudo guardar. Intenta de nuevo.'),
     });
   }
 
@@ -196,18 +203,16 @@ export class QuickCreate {
     if (action === 'project') {
       required('name', 'status');
       this.form.patchValue({ status: 'planned' });
-    } else {
+    } else if (action !== 'routine') {
       required('date');
-      if (action !== 'habit') {
-        required('amount');
-        this.form.controls.amount.addValidators(Validators.min(0.01));
-      }
+      required('amount');
+      this.form.controls.amount.addValidators(Validators.min(0.01));
       if (action === 'expense') required('categoryId');
-      if (action === 'debt-payment' || action === 'saving' || action === 'habit') required('targetId');
-      if (action === 'debt-payment') this.form.patchValue({ type: 'monthly' });
+      if (action === 'debt-payment' || action === 'saving') required('targetId');
+      if (action === 'income' || action === 'debt-payment' || action === 'saving') required('type');
+      if (action === 'debt-payment') this.form.patchValue({ type: 'minimum' });
       if (action === 'saving') this.form.patchValue({ type: 'deposit' });
-      if (action === 'habit') { required('status'); this.form.patchValue({ status: 'completed' }); }
-      if (action === 'income') this.form.patchValue({ type: 'paycheck' });
+      if (action === 'income') this.form.patchValue({ type: 'regular' });
     }
     Object.values(this.form.controls).forEach((control) => control.updateValueAndValidity());
     this.loadOptions(action);
@@ -215,8 +220,8 @@ export class QuickCreate {
 
   private loadOptions(action: QuickAction): void {
     const sources: Partial<Record<QuickAction, Observable<unknown[]>>> = {
-      expense: this.moneyApi.getCategories(), 'debt-payment': this.debtsApi.getDebts(),
-      saving: this.savingsApi.getGoals(), habit: this.habitsApi.getHabits(),
+      expense: this.moneyApi.getCategories(), income: this.incomeApi.getSources(), 'debt-payment': this.debtsApi.getDebts(),
+      saving: this.savingsApi.getGoals(),
     };
     const source = sources[action];
     if (!source) return;
@@ -224,9 +229,9 @@ export class QuickCreate {
     source.pipe(finalize(() => this.loadingOptions.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (items) => {
         if (action === 'expense') this.categories.set((items as MoneyCategoryApi[]).filter(({ type, isActive }) => (!type || type === 'expense') && isActive !== false));
-        if (action === 'debt-payment') this.debts.set(items as DebtApi[]);
-        if (action === 'saving') this.goals.set(items as SavingsGoalApi[]);
-        if (action === 'habit') this.habits.set(items as HabitApi[]);
+        if (action === 'income') this.incomeSources.set((items as IncomeSource[]).filter(({ isActive }) => isActive));
+        if (action === 'debt-payment') this.debts.set((items as DebtApi[]).filter(({ status }) => !status || status === 'active'));
+        if (action === 'saving') this.goals.set((items as SavingsGoalApi[]).filter(({ status }) => !status || status === 'active'));
       },
       error: () => this.error.set('No se pudieron cargar las opciones.'),
     });

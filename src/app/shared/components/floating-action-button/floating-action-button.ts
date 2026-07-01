@@ -1,4 +1,5 @@
-import { Component, HostListener, signal } from '@angular/core';
+import { Component, HostListener, inject, signal } from '@angular/core';
+import { Router } from '@angular/router';
 import { QuickAction, QuickCreate } from '../quick-create/quick-create';
 
 @Component({
@@ -86,6 +87,7 @@ import { QuickAction, QuickCreate } from '../quick-create/quick-create';
   `,
 })
 export class FloatingActionButton {
+  private readonly router = inject(Router);
   readonly open = signal(false);
   readonly selected = signal<QuickAction | null>(null);
   readonly message = signal('');
@@ -94,13 +96,13 @@ export class FloatingActionButton {
     { action: 'income', label: 'Ingreso', icon: '+', color: 'var(--color-green)', x: '-122px', y: '-96px' },
     { action: 'debt-payment', label: 'Pago', icon: '✓', color: 'var(--color-orange)', x: '-148px', y: '-144px' },
     { action: 'saving', label: 'Ahorro', icon: '◇', color: 'var(--color-blue)', x: '-145px', y: '-194px' },
-    { action: 'habit', label: 'Hábito', icon: '●', color: 'var(--color-pink)', x: '-112px', y: '-238px' },
+    { action: 'routine', label: 'Rutina', icon: '●', color: 'var(--color-pink)', x: '-112px', y: '-238px' },
     { action: 'project', label: 'Proyecto', icon: '▣', color: 'var(--color-purple)', x: '-62px', y: '-270px' },
   ];
 
   toggle(): void { this.open.update((value) => !value); }
   closeMenu(): void { this.open.set(false); }
-  select(action: QuickAction): void { this.closeMenu(); this.selected.set(action); }
+  select(action: QuickAction): void { this.closeMenu(); if (action === 'routine') void this.router.navigateByUrl('/routine'); else this.selected.set(action); }
   finish(message: string): void {
     this.selected.set(null);
     this.message.set(message);
