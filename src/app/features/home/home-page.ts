@@ -73,6 +73,7 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
       @if (homeSummary.activeDays || homeSummary.streak) {
         <section class="surface-card">
           <div class="card-head"><h2 class="section-card-title">Progreso anual</h2><a class="card-link" routerLink="/progress">Ver</a></div>
+          <p class="section-card-copy">Cada punto representa un día.</p>
           <div class="heatmap-preview">
             @for (day of homeSummary.heatmap; track day.id) { <span [class]="getHeatmapClass(day.value)"></span> }
           </div>

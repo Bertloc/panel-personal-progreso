@@ -1,4 +1,29 @@
 import { HeatmapDay } from '../models/home-summary.model';
+import { ProgressHeatmapDay } from '../models/progress.model';
+
+export interface ProgressMonth {
+  label: string;
+  slots: Array<ProgressHeatmapDay | null>;
+}
+
+export function groupProgressDaysByMonth(days: ProgressHeatmapDay[]): ProgressMonth[] {
+  const groups = new Map<string, ProgressHeatmapDay[]>();
+  for (const day of days) {
+    const key = day.date.slice(0, 7);
+    if (/^\d{4}-\d{2}$/.test(key)) groups.set(key, [...(groups.get(key) ?? []), day]);
+  }
+  return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, monthDays]) => {
+    const first = new Date(`${key}-01T00:00:00`);
+    const padding = (first.getDay() + 6) % 7;
+    const lastDay = Math.max(...monthDays.map(({ date }) => Number(date.slice(8, 10))));
+    const slots = Array<ProgressHeatmapDay | null>(padding + lastDay).fill(null);
+    for (const day of monthDays) slots[padding + Number(day.date.slice(8, 10)) - 1] = day;
+    return {
+      label: new Intl.DateTimeFormat('es-MX', { month: 'long' }).format(first),
+      slots,
+    };
+  });
+}
 
 type HeatmapSourceDay = {
   id: string;

@@ -15,6 +15,7 @@ import { QuickCreateEventsService } from './core/services/quick-create-events.se
 import { HabitsPage } from './features/habits/habits-page';
 import { RoutinesApiService } from './core/services/routines-api.service';
 import { RoutineSetupPage } from './features/habits/routine-setup-page';
+import { ProgressApiService } from './core/services/progress-api.service';
 
 describe('App', () => {
   beforeEach(async () => {
@@ -248,6 +249,20 @@ describe('App', () => {
     expect(toNumber('2372.85')).toBe(2372.85);
     expect(toNumber('invalid')).toBe(0);
     expect(heatmap.map(({ value }) => value)).toEqual([4, 0]);
+  });
+
+  it('should request and normalize real progress heatmap data', () => {
+    const api = TestBed.inject(ProgressApiService);
+    const http = TestBed.inject(HttpTestingController);
+    let result = { activeDays: 0, filter: '' };
+    api.getHeatmap('routine', 2026).subscribe((response) => result = { activeDays: response.summary.activeDays, filter: response.filter });
+
+    http.expectOne((request) => request.url === 'http://localhost:3000/api/progress/heatmap' && request.params.get('filter') === 'routine' && request.params.get('year') === '2026').flush({
+      filter: 'habits', year: 2026, items: [{ date: '2026-07-01', value: 75, level: 3, status: 'good' }],
+      summary: { average: 75, activeDays: 1, excellentDays: 0, currentStreak: 1 },
+    });
+
+    expect(result).toEqual({ activeDays: 1, filter: 'routine' });
   });
 
   it('should map the real dashboard contract as configured money', () => {
