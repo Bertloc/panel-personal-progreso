@@ -1,11 +1,20 @@
 import { ApiPayload } from './api.model';
 import { SavingsGoal } from './savings.model';
 
+export type CategoryType = 'expense' | 'saving' | 'debt' | 'income' | 'project';
+export type CategoryPriority = 'low' | 'medium' | 'high' | 'essential';
+
 export interface MoneyCategoryApi {
   id: string;
+  userId?: string;
   name: string;
-  type?: 'expense' | 'income' | string;
-  color?: string;
+  slug?: string;
+  type?: CategoryType | string;
+  priority?: CategoryPriority;
+  isFixed?: boolean;
+  isActive?: boolean;
+  color?: string | null;
+  icon?: string | null;
   spent?: string | number;
   used?: string | number;
   limit?: string | number;
@@ -38,5 +47,5 @@ export interface MoneyCategory { name: string; used: number; limit: number; tone
 export interface PaymentItem { name: string; amount: number; dueLabel: string; suffix?: string; }
 export interface RecentExpense { name: string; amount: number; day: string; }
 export interface Paycheck { income: number; debt: number; gym: number; nutritionist: number; foodWeekly: number; transportPerDay: number; transportDays: number; }
-export interface DebtInfo { left: number; nextPayment: number; date: string; progress: number; extra: number; bankPlan: string; aggressivePlan: string; }
+export interface DebtInfo { name?: string; left: number; nextPayment: number; date: string; progress: number; extra: number; bankPlan: string; aggressivePlan: string; }
 export interface MoneyView { paycheck: Paycheck; upcomingPayments: PaymentItem[]; debtInfo: DebtInfo; categories: MoneyCategory[]; savingsGoals: SavingsGoal[]; recentExpenses: RecentExpense[]; }

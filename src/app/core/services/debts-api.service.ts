@@ -13,6 +13,7 @@ export class DebtsApiService {
   createDebt(payload: CreateDebtPayload) { return this.http.post<DebtApi>(this.url, payload); }
   getDebtById(id: string) { return this.http.get<ApiResponse<DebtApi>>(`${this.url}/${id}`).pipe(map(unwrapApiResponse)); }
   updateDebt(id: string, payload: UpdateDebtPayload) { return this.http.patch<DebtApi>(`${this.url}/${id}`, payload); }
+  deleteDebt(id: string) { return this.http.delete<void>(`${this.url}/${id}`); }
   createDebtPayment(debtId: string, payload: CreateDebtPaymentPayload) { return this.http.post<DebtPaymentApi>(`${this.url}/${debtId}/payments`, payload); }
   getDebtPayments(debtId: string) { return this.http.get<ApiResponse<DebtPaymentApi[]>>(`${this.url}/${debtId}/payments`).pipe(map(unwrapApiResponse)); }
   getDebtProjection(debtId: string) { return this.http.get<ApiResponse<DebtProjectionApi>>(`${this.url}/${debtId}/projection`).pipe(map(unwrapApiResponse)); }

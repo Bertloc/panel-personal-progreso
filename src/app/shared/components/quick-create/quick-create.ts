@@ -35,7 +35,7 @@ const ACTION_TITLES: Record<QuickAction, string> = {
                 @for (category of categories(); track category.id) { <option [value]="category.id">{{ category.name }}</option> }
               </select>
             </label>
-            @if (!loadingOptions() && !categories().length) { <p class="empty">No hay categorías de gasto disponibles.</p> }
+            @if (!loadingOptions() && !categories().length) { <p class="empty">Primero crea una categoría de gasto.</p> }
             <label>Monto <input formControlName="amount" type="number" min="0.01" step="0.01" inputmode="decimal"></label>
             <label>Fecha <input formControlName="date" type="date"></label>
             <label>Nota (opcional) <textarea formControlName="note" rows="2"></textarea></label>
@@ -223,7 +223,7 @@ export class QuickCreate {
     this.loadingOptions.set(true);
     source.pipe(finalize(() => this.loadingOptions.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (items) => {
-        if (action === 'expense') this.categories.set((items as MoneyCategoryApi[]).filter(({ type }) => !type || type === 'expense'));
+        if (action === 'expense') this.categories.set((items as MoneyCategoryApi[]).filter(({ type, isActive }) => (!type || type === 'expense') && isActive !== false));
         if (action === 'debt-payment') this.debts.set(items as DebtApi[]);
         if (action === 'saving') this.goals.set(items as SavingsGoalApi[]);
         if (action === 'habit') this.habits.set(items as HabitApi[]);

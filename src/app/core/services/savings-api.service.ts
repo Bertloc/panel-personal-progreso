@@ -13,6 +13,7 @@ export class SavingsApiService {
   createGoal(payload: CreateSavingsGoalPayload) { return this.http.post<SavingsGoalApi>(this.url, payload); }
   getGoalById(id: string) { return this.http.get<ApiResponse<SavingsGoalApi>>(`${this.url}/${id}`).pipe(map(unwrapApiResponse)); }
   updateGoal(id: string, payload: UpdateSavingsGoalPayload) { return this.http.patch<SavingsGoalApi>(`${this.url}/${id}`, payload); }
+  deleteGoal(id: string) { return this.http.delete<void>(`${this.url}/${id}`); }
   createMovement(goalId: string, payload: CreateSavingsMovementPayload) { return this.http.post<SavingsMovementApi>(`${this.url}/${goalId}/movements`, payload); }
   getMovements(goalId: string) { return this.http.get<ApiResponse<SavingsMovementApi[]>>(`${this.url}/${goalId}/movements`).pipe(map(unwrapApiResponse)); }
 }

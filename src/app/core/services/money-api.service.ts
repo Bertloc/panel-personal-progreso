@@ -9,9 +9,14 @@ import { CreateCategoryPayload, CreateExpensePayload, ExpenseApi, ExpenseFilters
 export class MoneyApiService {
   private readonly http = inject(HttpClient);
   private readonly url = `${API_BASE_URL}/money`;
-  getCategories() { return this.http.get<ApiResponse<MoneyCategoryApi[]>>(`${this.url}/categories`).pipe(map(unwrapApiResponse)); }
+  getCategories(filters: ExpenseFilters = {}) {
+    let params = new HttpParams();
+    for (const [key, value] of Object.entries(filters)) if (value !== undefined) params = params.set(key, String(value));
+    return this.http.get<ApiResponse<MoneyCategoryApi[]>>(`${this.url}/categories`, { params }).pipe(map(unwrapApiResponse));
+  }
   createCategory(payload: CreateCategoryPayload) { return this.http.post<MoneyCategoryApi>(`${this.url}/categories`, payload); }
   updateCategory(id: string, payload: UpdateCategoryPayload) { return this.http.patch<MoneyCategoryApi>(`${this.url}/categories/${id}`, payload); }
+  deleteCategory(id: string) { return this.http.delete<void>(`${this.url}/categories/${id}`); }
   getExpenses(filters: ExpenseFilters = {}) {
     let params = new HttpParams();
     for (const [key, value] of Object.entries(filters)) if (value !== undefined) params = params.set(key, String(value));

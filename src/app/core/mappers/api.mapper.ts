@@ -1,7 +1,7 @@
 import { HOME_FALLBACK } from '../fallbacks/home.fallback';
 import { DashboardSummary } from '../models/dashboard.model';
 import { HomeSummary, HeatmapDay } from '../models/home-summary.model';
-import { BudgetPeriodApi } from '../models/budgets.model';
+import { BudgetCurrentResponse } from '../models/budgets.model';
 import { DebtApi } from '../models/debts.model';
 import { HabitApi, HabitsView } from '../models/habits.model';
 import { DebtInfo, ExpenseApi, MoneyCategory, MoneyCategoryApi, MoneyView, Paycheck, PaymentItem, RecentExpense } from '../models/money.model';
@@ -9,6 +9,8 @@ import { HeatmapApiDay, HeatmapApiResponse, ProgressTodayApi, ProgressView } fro
 import { ProjectApi, ProjectBudgetApi, ProjectCard, ProjectsView, ProjectTaskApi } from '../models/projects.model';
 import { SavingsGoal, SavingsGoalApi } from '../models/savings.model';
 import { SettingsApi } from '../models/settings.model';
+import { IncomeSource } from '../models/income.model';
+import { RecurringPayment } from '../models/recurring-payment.model';
 import { toNumber } from '../utils/number.util';
 
 const heatmapStatus = ['empty', 'low', 'medium', 'good', 'excellent'] as const;
@@ -39,30 +41,30 @@ export function mapDashboardSummaryToHomeSummary(source: DashboardSummary): Home
 }
 
 const categoryTones: MoneyCategory['tone'][] = ['green', 'blue', 'purple', 'orange', 'pink'];
-export function mapMoneyView(categories: MoneyCategoryApi[], expenses: ExpenseApi[], budget: BudgetPeriodApi, debts: DebtApi[], goals: SavingsGoalApi[], settings: SettingsApi): MoneyView {
+export function mapMoneyView(categories: MoneyCategoryApi[], expenses: ExpenseApi[], budget: BudgetCurrentResponse, debts: DebtApi[], goals: SavingsGoalApi[], settings: SettingsApi, incomeSources: IncomeSource[] = [], recurringPayments: RecurringPayment[] = []): MoneyView {
   const limits = budget.limits ?? [];
-  const mappedCategories: MoneyCategory[] = (limits.length ? limits : categories).map((item, index) => {
+  const mappedCategories: MoneyCategory[] = limits.map((item, index) => {
     const name = item.name ?? item.categoryName ?? item.category?.name ?? 'Sin categoría';
     const apiCategory = categories.find((category) => category.name === name);
-    const used = toNumber(item.used ?? item.spent ?? apiCategory?.used ?? apiCategory?.spent ?? expenses.filter((expense) => expense.category?.name === name || expense.categoryName === name).reduce((sum, expense) => sum + toNumber(expense.amount), 0));
-    const limit = toNumber(item.limit ?? item.amount ?? apiCategory?.limit);
+    const used = toNumber(item.used ?? item.usedAmount ?? item.spent ?? apiCategory?.used ?? apiCategory?.spent ?? expenses.filter((expense) => expense.category?.name === name || expense.categoryName === name).reduce((sum, expense) => sum + toNumber(expense.amount), 0));
+    const limit = toNumber(item.limit ?? item.limitAmount ?? item.amount ?? apiCategory?.limit);
     return { name, used, limit, tone: categoryTones[index % categoryTones.length], status: used > limit && limit > 0 ? 'Excedido' : used >= limit * 0.8 && limit > 0 ? 'Cuidado' : 'OK' };
   });
   const findLimit = (name: string) => mappedCategories.find((item) => item.name.toLowerCase().includes(name))?.limit ?? 0;
-  const debt = debts[0];
+  const debt = debts.find(({ status }) => !status || status === 'active');
   const paycheck: Paycheck = {
-    income: toNumber(settings.paydayIncome ?? settings.income ?? budget.income), debt: toNumber(debt?.nextPaymentAmount ?? debt?.minimumPayment),
+    income: incomeSources.filter(({ isActive }) => isActive).reduce((sum, source) => sum + toNumber(source.amount), 0) || toNumber(settings.paydayIncome ?? settings.income ?? budget.current?.income), debt: toNumber(debt?.nextPaymentAmount ?? debt?.minimumPayment),
     gym: findLimit('gym'), nutritionist: findLimit('nutri'), foodWeekly: findLimit('comida'), transportPerDay: findLimit('transporte') / 14, transportDays: 7,
   };
-  const originalDebt = toNumber(debt?.originalAmount ?? debt?.totalAmount);
-  const left = toNumber(debt?.remainingAmount ?? debt?.balance);
+  const originalDebt = toNumber(debt?.initialAmount ?? debt?.originalAmount ?? debt?.totalAmount);
+  const left = toNumber(debt?.currentAmount ?? debt?.remainingAmount ?? debt?.balance);
   const debtInfo: DebtInfo = {
-    left, nextPayment: toNumber(debt?.nextPaymentAmount ?? debt?.minimumPayment), date: debt?.nextPaymentDate ?? 'Sin fecha',
-    progress: debt?.progress === undefined ? (originalDebt ? clampPercent(((originalDebt - left) / originalDebt) * 100) : 0) : clampPercent(debt.progress),
+    name: debt?.name, left, nextPayment: toNumber(debt?.nextPaymentAmount ?? debt?.minimumPayment), date: debt?.nextPaymentDate ?? 'Sin fecha',
+    progress: debt?.progressPercent ?? (debt?.progress === undefined ? (originalDebt ? clampPercent(((originalDebt - left) / originalDebt) * 100) : 0) : clampPercent(debt.progress)),
     extra: toNumber(debt?.suggestedExtraPayment), bankPlan: debt?.bankPlan ?? 'Sin proyección', aggressivePlan: debt?.aggressivePlan ?? 'Sin proyección',
   };
-  const upcomingPayments: PaymentItem[] = debt ? [{ name: debt.name ?? 'Deuda', amount: debtInfo.nextPayment, dueLabel: debtInfo.date }] : [];
-  const savingsGoals: SavingsGoal[] = goals.map((goal, index) => ({ name: goal.name, current: toNumber(goal.currentAmount ?? goal.current), target: toNumber(goal.targetAmount ?? goal.target), tone: (['purple', 'green', 'blue'] as const)[index % 3] }));
+  const upcomingPayments: PaymentItem[] = recurringPayments.filter(({ isActive }) => isActive).map((payment) => ({ name: payment.name, amount: toNumber(payment.amount), dueLabel: payment.nextDueDate ?? (payment.dueDay ? `Día ${payment.dueDay}` : payment.frequency) }));
+  const savingsGoals: SavingsGoal[] = goals.filter(({ status }) => !status || status === 'active').map((goal, index) => ({ name: goal.name, current: toNumber(goal.currentAmount ?? goal.current), target: toNumber(goal.targetAmount ?? goal.target), tone: (['purple', 'green', 'blue'] as const)[index % 3] }));
   const recentExpenses: RecentExpense[] = expenses.slice(0, 5).map((expense) => ({ name: expense.category?.name ?? expense.categoryName ?? expense.name ?? expense.description ?? 'Gasto', amount: toNumber(expense.amount), day: formatRelativeDay(expense.expenseDate ?? expense.date ?? expense.createdAt) }));
   return { paycheck, upcomingPayments, debtInfo, categories: mappedCategories, savingsGoals, recentExpenses };
 }

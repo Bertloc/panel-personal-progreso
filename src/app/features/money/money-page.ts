@@ -1,5 +1,6 @@
 import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { RouterLink } from '@angular/router';
 import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
 import { MoneyCategoryStatus } from '../../core/models/money.model';
 import { MONEY_FALLBACK } from '../../core/fallbacks/money.fallback';
@@ -9,12 +10,14 @@ import { DebtsApiService } from '../../core/services/debts-api.service';
 import { SavingsApiService } from '../../core/services/savings-api.service';
 import { SettingsApiService } from '../../core/services/settings-api.service';
 import { QuickCreateEventsService } from '../../core/services/quick-create-events.service';
+import { IncomeApiService } from '../../core/services/income-api.service';
+import { RecurringPaymentsApiService } from '../../core/services/recurring-payments-api.service';
 import { mapMoneyView } from '../../core/mappers/api.mapper';
-import { catchError, forkJoin, map, of } from 'rxjs';
+import { catchError, forkJoin, map, merge, of, tap } from 'rxjs';
 
 @Component({
   selector: 'app-money-page',
-  imports: [AppCurrencyPipe],
+  imports: [AppCurrencyPipe, RouterLink],
   template: `
     <div class="page-stack">
       <header class="page-header">
@@ -22,6 +25,12 @@ import { catchError, forkJoin, map, of } from 'rxjs';
         <h1 class="page-title">Dinero</h1>
         <p class="page-copy">Presupuesto, deuda y metas en un solo lugar.</p>
       </header>
+
+      <a class="setup-link" routerLink="/money/setup">Configurar dinero</a>
+
+      @if (apiError()) {
+        <p class="api-error" role="status">No pudimos cargar tus datos de dinero. Intenta de nuevo más tarde.</p>
+      }
 
       <section class="pill-row">
         @for (tab of tabs; track tab) {
@@ -31,6 +40,7 @@ import { catchError, forkJoin, map, of } from 'rxjs';
         }
       </section>
 
+      @if (paycheck.income > 0) {
       <section class="surface-card money-hero">
         <p class="card-label">Libre real estimado</p>
         <strong class="hero-amount">{{ freeEstimate | appCurrency }}</strong>
@@ -38,52 +48,12 @@ import { catchError, forkJoin, map, of } from 'rxjs';
 
         <div class="summary-grid">
           <div>
-            <p class="card-meta">Ingreso quincenal</p>
+            <p class="card-meta">Ingreso configurado</p>
             <strong>{{ paycheck.income | appCurrency }}</strong>
           </div>
           <div>
-            <p class="card-meta">Libre estimado</p>
-            <strong>{{ freeEstimate | appCurrency }}</strong>
-          </div>
-        </div>
-
-        <div class="money-group">
-          <div class="group-head">
-            <strong>Apartados fijos</strong>
-            <span>{{ fixedReserved | appCurrency }}</span>
-          </div>
-
-          <div class="money-lines">
-            <div class="money-line">
-              <span>Deuda bancaria</span>
-              <strong>{{ paycheck.debt | appCurrency }}</strong>
-            </div>
-            <div class="money-line">
-              <span>Gym</span>
-              <strong>{{ paycheck.gym | appCurrency }}</strong>
-            </div>
-            <div class="money-line">
-              <span>Nutriólogo</span>
-              <strong>{{ paycheck.nutritionist | appCurrency }}</strong>
-            </div>
-          </div>
-        </div>
-
-        <div class="money-group">
-          <div class="group-head">
-            <strong>Necesidades variables</strong>
-            <span>{{ variableNeeds | appCurrency }}</span>
-          </div>
-
-          <div class="money-lines">
-            <div class="money-line">
-              <span>Comida semanal</span>
-              <strong>{{ paycheck.foodWeekly | appCurrency }}</strong>
-            </div>
-            <div class="money-line">
-              <span>Transporte estimado</span>
-              <strong>{{ paycheck.transportPerDay | appCurrency }}/día</strong>
-            </div>
+            <p class="card-meta">Presupuesto asignado</p>
+            <strong>{{ budgetedTotal | appCurrency }}</strong>
           </div>
         </div>
 
@@ -91,8 +61,13 @@ import { catchError, forkJoin, map, of } from 'rxjs';
           <span class="progress-fill progress-fill--green" [style.width.%]="reservedPercent"></span>
         </div>
 
-        <p class="status-line">Ajustado pero viable</p>
       </section>
+      } @else {
+        <section class="surface-card empty-state">
+          <strong>Aún no has configurado tus ingresos.</strong>
+          <a class="card-link" routerLink="/onboarding">Configurar ahora</a>
+        </section>
+      }
 
       <section class="surface-card compact-card">
         <h2 class="section-card-title">Próximos pagos</h2>
@@ -108,6 +83,9 @@ import { catchError, forkJoin, map, of } from 'rxjs';
                 {{ payment.amount | appCurrency }}{{ payment.suffix ?? '' }}
               </strong>
             </div>
+          } @empty {
+            <p class="section-card-copy">Aún no has definido próximos pagos.</p>
+            <a class="card-link" routerLink="/money/setup">Agregar pago recurrente</a>
           }
         </div>
       </section>
@@ -144,13 +122,18 @@ import { catchError, forkJoin, map, of } from 'rxjs';
                 ></span>
               </div>
             </div>
+          } @empty {
+            <p class="section-card-copy">Aún no has definido presupuesto por categoría.</p>
+            <a class="card-link" routerLink="/money/setup">Crear categorías</a>
+            <a class="card-link" routerLink="/money/setup">Crear presupuesto</a>
           }
         </div>
       </section>
 
+      @if (debtInfo.left > 0) {
       <section class="surface-card compact-card">
         <div class="card-head">
-          <h2 class="section-card-title">Deuda bancaria</h2>
+          <h2 class="section-card-title">{{ debtInfo.name || 'Deuda' }}</h2>
           <span class="status-badge status-badge--orange">{{ debtInfo.progress }}%</span>
         </div>
 
@@ -170,23 +153,14 @@ import { catchError, forkJoin, map, of } from 'rxjs';
           <span class="progress-fill progress-fill--purple" [style.width.%]="debtInfo.progress"></span>
         </div>
 
-        <div class="money-lines money-lines--compact">
-          <div class="money-line">
-            <span>Pago extra sugerido</span>
-            <strong>{{ debtInfo.extra | appCurrency }}</strong>
-          </div>
-          <div class="money-line">
-            <span>Plan banco</span>
-            <strong>{{ debtInfo.bankPlan }}</strong>
-          </div>
-          <div class="money-line">
-            <span>Plan agresivo</span>
-            <strong>{{ debtInfo.aggressivePlan }}</strong>
-          </div>
-        </div>
-
-        <p class="debt-note">Prioridad actual: bajar deuda sin romper comida/transporte.</p>
       </section>
+      } @else {
+        <section class="surface-card empty-state">
+          <h2 class="section-card-title">Deudas</h2>
+          <p class="section-card-copy">Aún no tienes deudas registradas.</p>
+          <a class="card-link" routerLink="/money/setup">Agregar deuda</a>
+        </section>
+      }
 
       <section class="surface-card compact-card">
         <h2 class="section-card-title">Gastos recientes</h2>
@@ -207,10 +181,7 @@ import { catchError, forkJoin, map, of } from 'rxjs';
       <section class="surface-card compact-card savings-card">
         <div class="card-head">
           <h2 class="section-card-title">Metas de ahorro</h2>
-          <span class="status-badge status-badge--purple">En pausa</span>
         </div>
-
-        <p class="savings-copy">En pausa mientras priorizas deuda.</p>
 
         <div class="list-card">
           @for (goal of savingsGoals; track goal.name) {
@@ -230,6 +201,9 @@ import { catchError, forkJoin, map, of } from 'rxjs';
                 ></span>
               </div>
             </div>
+          } @empty {
+            <p class="section-card-copy">Aún no tienes metas de ahorro.</p>
+            <a class="card-link" routerLink="/money/setup">Crear meta de ahorro</a>
           }
         </div>
       </section>
@@ -241,6 +215,25 @@ import { catchError, forkJoin, map, of } from 'rxjs';
         radial-gradient(circle at top right, rgb(74 222 128 / 0.18), transparent 38%),
         linear-gradient(180deg, rgb(18 36 24 / 0.96), rgb(18 21 29 / 1));
       border-color: rgb(74 222 128 / 0.2);
+    }
+
+    .setup-link { display: inline-flex; width: fit-content; padding: 10px 14px; border-radius: 12px; background: var(--color-purple); color: white; text-decoration: none; font-weight: 750; }
+
+    .api-error,
+    .empty-state {
+      margin: 0;
+      padding: 14px;
+      border-radius: 14px;
+    }
+
+    .api-error {
+      background: rgb(255 77 109 / 0.12);
+      color: var(--color-red);
+    }
+
+    .empty-state {
+      display: grid;
+      gap: 10px;
     }
 
     .compact-card {
@@ -422,8 +415,11 @@ export class MoneyPage {
   private readonly debtsApi = inject(DebtsApiService);
   private readonly savingsApi = inject(SavingsApiService);
   private readonly settingsApi = inject(SettingsApiService);
+  private readonly incomeApi = inject(IncomeApiService);
+  private readonly recurringApi = inject(RecurringPaymentsApiService);
   private readonly quickCreateEvents = inject(QuickCreateEventsService);
   private readonly destroyRef = inject(DestroyRef);
+  protected readonly apiError = signal(false);
   protected readonly tabs = ['Presupuesto activo', 'Deuda', 'Ahorro'];
   protected get paycheck() { return this.view().paycheck; }
   protected get upcomingPayments() { return this.view().upcomingPayments; }
@@ -434,31 +430,26 @@ export class MoneyPage {
 
   constructor() {
     this.loadMoneyView();
-    this.quickCreateEvents.expenseCreated$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadMoneyView());
+    merge(this.quickCreateEvents.expenseCreated$, this.quickCreateEvents.moneyChanged$).pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadMoneyView());
   }
 
   private loadMoneyView(): void {
-    forkJoin({ categories: this.moneyApi.getCategories(), expenses: this.moneyApi.getExpenses(), budget: this.budgetsApi.getCurrentBudget(), debts: this.debtsApi.getDebts(), goals: this.savingsApi.getGoals(), settings: this.settingsApi.getSettings() }).pipe(
-      map(({ categories, expenses, budget, debts, goals, settings }) => mapMoneyView(categories, expenses, budget, debts, goals, settings)),
-      catchError(() => of(MONEY_FALLBACK)),
+    forkJoin({ categories: this.moneyApi.getCategories(), expenses: this.moneyApi.getExpenses(), budget: this.budgetsApi.getCurrentBudget(), debts: this.debtsApi.getDebts(), goals: this.savingsApi.getGoals(), settings: this.settingsApi.getSettings(), incomeSources: this.incomeApi.getSources(), recurringPayments: this.recurringApi.getRecurringPayments() }).pipe(
+      map(({ categories, expenses, budget, debts, goals, settings, incomeSources, recurringPayments }) => mapMoneyView(categories, expenses, budget, debts, goals, settings, incomeSources, recurringPayments)),
+      tap(() => this.apiError.set(false)),
+      catchError(() => { this.apiError.set(true); return of(MONEY_FALLBACK); }),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe((view) => this.view.set(view));
   }
 
-  protected get fixedReserved(): number {
-    return this.paycheck.debt + this.paycheck.gym + this.paycheck.nutritionist;
-  }
-
-  protected get variableNeeds(): number {
-    return this.paycheck.foodWeekly + this.paycheck.transportPerDay * this.paycheck.transportDays;
-  }
+  protected get budgetedTotal(): number { return this.categories.reduce((total, category) => total + category.limit, 0); }
 
   protected get freeEstimate(): number {
-    return this.paycheck.income - this.fixedReserved - this.variableNeeds;
+    return this.paycheck.income - this.budgetedTotal;
   }
 
   protected get reservedPercent(): number {
-    return this.getProgressPercent(this.paycheck.income - this.freeEstimate, this.paycheck.income);
+    return this.getProgressPercent(this.budgetedTotal, this.paycheck.income);
   }
 
   protected getProgressPercent(used: number, limit: number): number {

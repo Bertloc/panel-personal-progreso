@@ -1,0 +1,23 @@
+:host { display: block; }
+.manager { display: grid; gap: 18px; }
+.manager-head, .item-head, .actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+h2, h3, p { margin: 0; }
+form { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--color-border); border-radius: 18px; background: #0c0f15; }
+.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+label { display: grid; gap: 7px; color: var(--color-text-secondary); font-size: .82rem; font-weight: 650; }
+label.full { grid-column: 1 / -1; }
+.check { display: flex; align-items: center; }
+input, select, textarea { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--color-border); border-radius: 12px; background: var(--color-background-secondary); color: var(--color-text); font: inherit; color-scheme: dark; }
+input[type='checkbox'] { width: 20px; min-height: 20px; accent-color: var(--color-green); }
+.items { display: grid; gap: 10px; }
+.item { display: grid; gap: 9px; padding: 14px; border: 1px solid var(--color-border); border-radius: 16px; background: var(--color-card-secondary); }
+.meta { color: var(--color-text-secondary); font-size: .85rem; }
+button { min-height: 40px; padding: 9px 13px; border: 0; border-radius: 12px; background: var(--color-purple); color: white; cursor: pointer; font-weight: 750; }
+button.secondary { border: 1px solid var(--color-border); background: transparent; color: var(--color-text-secondary); }
+button.danger { background: rgb(255 77 109 / .14); color: var(--color-red); }
+button:disabled { cursor: not-allowed; opacity: .5; }
+.empty, .error, .success { padding: 12px; border-radius: 12px; color: var(--color-text-secondary); background: rgb(255 255 255 / .03); }
+.error { color: var(--color-red); background: rgb(255 77 109 / .1); }
+.success { color: var(--color-green); background: rgb(74 222 128 / .1); }
+.limit-row { display: grid; grid-template-columns: 1fr minmax(100px, 140px); align-items: center; gap: 12px; }
+@media (max-width: 380px) { .field-grid { grid-template-columns: 1fr; } label.full { grid-column: auto; } }

@@ -17,6 +17,10 @@
   padding: 32px 20px 164px;
 }
 
+.app-shell--onboarding .app-content {
+  padding-bottom: 32px;
+}
+
 @media (max-width: 459px) {
   .app-shell {
     border-inline: 0;
