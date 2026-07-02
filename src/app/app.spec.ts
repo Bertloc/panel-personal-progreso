@@ -1,10 +1,11 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { App } from './app';
 import { getHeatmapValueFromDay } from './core/utils/heatmap.util';
 import { HomePage } from './features/home/home-page';
 import { AppCurrencyPipe } from './shared/pipes/app-currency.pipe';
-import { provideHttpClient } from '@angular/common/http';
+import { HttpRequest, HttpResponse, provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { mapDashboardSummaryToHomeSummary, mapHeatmapDays } from './core/mappers/api.mapper';
 import { toNumber } from './core/utils/number.util';
@@ -18,12 +19,23 @@ import { RoutineSetupPage } from './features/habits/routine-setup-page';
 import { ProgressApiService } from './core/services/progress-api.service';
 import { ProjectsApiService } from './core/services/projects-api.service';
 import { ProjectsPage } from './features/projects/projects-page';
+import { AuthService } from './core/services/auth.service';
+import { authInterceptor } from './core/interceptors/auth.interceptor';
+import { firstValueFrom, of } from 'rxjs';
+import { OnboardingStateService } from './core/services/onboarding-state.service';
+
+let accessToken: string | null = null;
+const authStub = {
+  currentUser: signal(null), loading: signal(false), isAuthenticated: signal(true),
+  getAccessToken: () => Promise.resolve(accessToken), logout: () => Promise.resolve(), whenReady: () => Promise.resolve(),
+};
 
 describe('App', () => {
   beforeEach(async () => {
+    accessToken = null;
     await TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), { provide: AuthService, useValue: authStub }],
     }).compileComponents();
   });
 
@@ -300,5 +312,25 @@ describe('App', () => {
     expect(request.request.method).toBe('PATCH');
     expect(request.request.body).toEqual({ status: 'completed' });
     request.flush({ id: 'task-1', projectId: 'project-1', title: 'Detalle', priority: 'high', status: 'completed' });
+  });
+
+  it('should add the session token only to backend requests', async () => {
+    accessToken = 'access-token';
+    let backendRequest: HttpRequest<unknown> | undefined;
+    let externalRequest: HttpRequest<unknown> | undefined;
+    await firstValueFrom(TestBed.runInInjectionContext(() => authInterceptor(new HttpRequest('GET', 'http://localhost:3000/api/projects'), (request) => { backendRequest = request; return of(new HttpResponse()); })));
+    await firstValueFrom(TestBed.runInInjectionContext(() => authInterceptor(new HttpRequest('GET', 'https://example.com'), (request) => { externalRequest = request; return of(new HttpResponse()); })));
+    expect(backendRequest?.headers.get('Authorization')).toBe('Bearer access-token');
+    expect(externalRequest?.headers.has('Authorization')).toBe(false);
+  });
+
+  it('should reload onboarding state when the authenticated user changes', () => {
+    const state = TestBed.inject(OnboardingStateService);
+    const http = TestBed.inject(HttpTestingController);
+    state.load('user-1').subscribe();
+    http.expectOne('http://localhost:3000/api/onboarding/status').flush({ completed: true, profile: null, settings: null, incomeSources: [] });
+    state.load('user-2').subscribe();
+    http.expectOne('http://localhost:3000/api/onboarding/status').flush({ completed: false, profile: null, settings: null, incomeSources: [] });
+    expect(state.status()?.completed).toBe(false);
   });
 });

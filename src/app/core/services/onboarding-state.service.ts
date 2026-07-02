@@ -7,14 +7,23 @@ import { OnboardingApiService } from './onboarding-api.service';
 export class OnboardingStateService {
   private readonly api = inject(OnboardingApiService);
   private request?: Observable<OnboardingStatus>;
+  private userId?: string;
   readonly status = signal<OnboardingStatus | null>(null);
 
-  load() {
+  current(userId: string): OnboardingStatus | null {
+    if (this.userId !== userId) this.reset(userId);
+    return this.status();
+  }
+
+  load(userId?: string) {
+    if (this.userId !== userId) this.reset(userId);
     return this.request ??= this.api.getStatus().pipe(
       tap((status) => this.status.set(status)),
       shareReplay({ bufferSize: 1, refCount: false }),
     );
   }
+
+  reset(userId?: string): void { this.userId = userId; this.request = undefined; this.status.set(null); }
 
   markCompleted(payload: CompleteOnboardingPayload) {
     this.status.set({

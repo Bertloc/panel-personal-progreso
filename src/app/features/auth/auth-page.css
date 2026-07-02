@@ -1,0 +1,12 @@
+.auth-page { display: grid; gap: 24px; min-height: calc(100dvh - 64px); align-content: center; }
+form { display: grid; gap: 16px; }
+label { display: grid; gap: 8px; color: var(--color-text-secondary); font-weight: 650; }
+input { width: 100%; min-height: 48px; padding: 12px 14px; border: 1px solid var(--color-border); border-radius: 14px; background: #0c0f15; color: var(--color-text); font: inherit; }
+input:focus { outline: 2px solid rgb(74 222 128 / .35); border-color: var(--color-green); }
+button { min-height: 48px; border: 0; border-radius: 14px; background: var(--color-green); color: #04120a; cursor: pointer; font-weight: 800; }
+button:disabled { cursor: not-allowed; opacity: .45; }
+.switch, .error, .success { margin: 0; text-align: center; }
+.switch { color: var(--color-text-secondary); }
+.switch a { color: #b8beff; }
+.error { color: var(--color-red); }
+.success { color: var(--color-green); }

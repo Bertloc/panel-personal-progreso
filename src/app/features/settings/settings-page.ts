@@ -4,6 +4,9 @@ import { finalize, forkJoin } from 'rxjs';
 import { BudgetMode } from '../../core/models/settings.model';
 import { ProfileApiService } from '../../core/services/profile-api.service';
 import { SettingsApiService } from '../../core/services/settings-api.service';
+import { AuthService } from '../../core/services/auth.service';
+import { OnboardingStateService } from '../../core/services/onboarding-state.service';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'app-settings-page',
@@ -27,24 +30,32 @@ import { SettingsApiService } from '../../core/services/settings-api.service';
         @if (message()) { <p [class.error]="hasError()" role="status">{{ message() }}</p> }
         <button type="submit" [disabled]="form.invalid || loading()">{{ loading() ? 'Guardando…' : 'Guardar cambios' }}</button>
       </form>
+
+      <section class="surface-card logout-card"><div><h2 class="section-card-title">Sesión</h2><p>Cierra tu sesión en este dispositivo.</p></div><button class="logout" type="button" [disabled]="loggingOut()" (click)="logout()">{{ loggingOut() ? 'Saliendo…' : 'Cerrar sesión' }}</button></section>
     </div>
   `,
   styles: `
-    form, label { display: grid; gap: 14px; }
+    form, label, .logout-card { display: grid; gap: 14px; }
     label { gap: 8px; color: var(--color-text-secondary); font-weight: 650; }
     input, select { min-height: 48px; padding: 12px 14px; border: 1px solid var(--color-border); border-radius: 14px; background: #0c0f15; color: var(--color-text); font: inherit; }
     button { min-height: 48px; border: 0; border-radius: 14px; background: var(--color-green); color: #04120a; font-weight: 800; }
     button:disabled { opacity: .45; }
     p { margin: 0; color: var(--color-green); } p.error { color: var(--color-red); }
+    .logout-card p { margin-top: 6px; color: var(--color-text-secondary); }
+    button.logout { background: rgb(255 77 109 / .14); color: var(--color-red); }
   `,
 })
 export class SettingsPage {
   private readonly fb = inject(FormBuilder);
   private readonly profiles = inject(ProfileApiService);
   private readonly settings = inject(SettingsApiService);
+  private readonly auth = inject(AuthService);
+  private readonly onboarding = inject(OnboardingStateService);
+  private readonly router = inject(Router);
   protected readonly loading = signal(true);
   protected readonly message = signal('');
   protected readonly hasError = signal(false);
+  protected readonly loggingOut = signal(false);
   protected readonly budgetOptions: { value: BudgetMode; label: string }[] = [
     { value: 'adjusted', label: 'Ajustado' }, { value: 'flexible', label: 'Flexible' },
     { value: 'debt_aggressive', label: 'Pagar deuda' }, { value: 'saving_aggressive', label: 'Ahorrar' },
@@ -73,6 +84,13 @@ export class SettingsPage {
       next: () => this.showMessage('Cambios guardados.'),
       error: () => this.showMessage('No se pudieron guardar los cambios. Intenta de nuevo.', true),
     });
+  }
+
+  protected async logout() {
+    if (this.loggingOut()) return;
+    this.loggingOut.set(true);
+    try { await this.auth.logout(); } catch {}
+    finally { this.onboarding.reset(); await this.router.navigateByUrl('/login'); this.loggingOut.set(false); }
   }
 
   private showMessage(message: string, error = false) { this.message.set(message); this.hasError.set(error); }

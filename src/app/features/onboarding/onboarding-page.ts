@@ -6,6 +6,7 @@ import { CompleteOnboardingPayload } from '../../core/models/onboarding.model';
 import { BudgetMode, IncomeFrequency } from '../../core/models/settings.model';
 import { OnboardingApiService } from '../../core/services/onboarding-api.service';
 import { OnboardingStateService } from '../../core/services/onboarding-state.service';
+import { AuthService } from '../../core/services/auth.service';
 import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
 
 @Component({
@@ -141,6 +142,7 @@ export class OnboardingPage {
   private readonly state = inject(OnboardingStateService);
   private readonly router = inject(Router);
   private readonly route = inject(ActivatedRoute);
+  private readonly auth = inject(AuthService);
   protected readonly step = signal(0);
   protected readonly loading = signal(false);
   protected readonly error = signal('');
@@ -158,7 +160,7 @@ export class OnboardingPage {
     { value: 'saving_aggressive', label: 'Ahorrar', copy: 'Para apartar dinero primero.' },
   ];
   readonly form = this.fb.nonNullable.group({
-    displayName: ['', [Validators.required, Validators.maxLength(80)]],
+    displayName: [this.auth.currentUser()?.user_metadata['display_name'] as string ?? '', [Validators.required, Validators.maxLength(80)]],
     currency: ['MXN', Validators.required],
     amount: this.fb.control<number | null>(null, [Validators.required, Validators.min(0.01)]),
     frequency: this.fb.nonNullable.control<IncomeFrequency>('biweekly', Validators.required),

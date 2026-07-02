@@ -3,7 +3,7 @@
     <router-outlet />
   </main>
 
-  @if (showChrome()) {
+  @if (showChrome() && !auth.loading()) {
     <app-floating-action-button />
     <app-bottom-nav />
   }
