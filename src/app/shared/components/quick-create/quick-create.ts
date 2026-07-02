@@ -6,6 +6,7 @@ import { finalize, Observable } from 'rxjs';
 import { DebtApi } from '../../../core/models/debts.model';
 import { IncomeSource } from '../../../core/models/income.model';
 import { MoneyCategoryApi } from '../../../core/models/money.model';
+import { ProjectPriority, ProjectStatus } from '../../../core/models/projects.model';
 import { SavingsGoalApi } from '../../../core/models/savings.model';
 import { DebtsApiService } from '../../../core/services/debts-api.service';
 import { IncomeApiService } from '../../../core/services/income-api.service';
@@ -78,7 +79,7 @@ const ACTION_TITLES: Record<QuickAction, string> = {
           @case ('project') {
             <label>Nombre <input formControlName="name" type="text" maxlength="100"></label>
             <label>Descripción (opcional) <textarea formControlName="description" rows="3"></textarea></label>
-            <label>Prioridad (opcional) <select formControlName="priority"><option value="">Sin especificar</option><option value="high">Alta</option><option value="medium">Media</option><option value="low">Baja</option></select></label>
+            <label>Prioridad <select formControlName="priority"><option value="high">Alta</option><option value="medium">Media</option><option value="low">Baja</option><option value="urgent">Urgente</option></select></label>
             <label>Estado inicial <select formControlName="status"><option value="planned">Planeado</option><option value="active">Activo</option></select></label>
           }
         }
@@ -177,7 +178,7 @@ export class QuickCreate {
         message = 'Movimiento de ahorro guardado.';
         break;
       case 'project':
-        request = this.projectsApi.createProject({ name: value.name, description: value.description || undefined, priority: value.priority || undefined, status: value.status });
+        request = this.projectsApi.createProject({ name: value.name!, description: value.description || null, category: 'personal', priority: value.priority as ProjectPriority, status: value.status as ProjectStatus, startDate: null, targetDate: null, consumesMoney: false, budgetAmount: null });
         message = 'Proyecto guardado';
         break;
       default: return;
@@ -188,6 +189,7 @@ export class QuickCreate {
     request.pipe(finalize(() => this.saving.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: () => {
         if (action === 'expense' || action === 'income' || action === 'debt-payment' || action === 'saving') this.events.notifyMoneyChanged(action);
+        if (action === 'project') this.events.notifyProjectChanged();
         this.form.reset({ date: today() });
         this.created.emit(message);
       },
@@ -201,8 +203,8 @@ export class QuickCreate {
     Object.values(this.form.controls).forEach((control) => control.clearValidators());
     const required = (...names: (keyof typeof this.form.controls)[]) => names.forEach((name) => this.form.controls[name].addValidators(Validators.required));
     if (action === 'project') {
-      required('name', 'status');
-      this.form.patchValue({ status: 'planned' });
+      required('name', 'status', 'priority');
+      this.form.patchValue({ status: 'planned', priority: 'medium' });
     } else if (action !== 'routine') {
       required('date');
       required('amount');

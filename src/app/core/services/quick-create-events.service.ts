@@ -6,7 +6,10 @@ export type MoneyChange = 'expense' | 'income' | 'debt-payment' | 'saving' | 'se
 @Injectable({ providedIn: 'root' })
 export class QuickCreateEventsService {
   private readonly moneyChanged = new Subject<MoneyChange>();
+  private readonly projectChanged = new Subject<void>();
   readonly moneyChanged$ = this.moneyChanged.asObservable();
+  readonly projectChanged$ = this.projectChanged.asObservable();
 
   notifyMoneyChanged(change: MoneyChange = 'setup'): void { this.moneyChanged.next(change); }
+  notifyProjectChanged(): void { this.projectChanged.next(); }
 }

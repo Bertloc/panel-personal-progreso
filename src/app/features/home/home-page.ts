@@ -6,11 +6,13 @@ import { HOME_FALLBACK } from '../../core/fallbacks/home.fallback';
 import { mapDashboardSummaryToHomeSummary } from '../../core/mappers/api.mapper';
 import { HomeSummary } from '../../core/models/home-summary.model';
 import { RoutineSummary } from '../../core/models/routine.model';
+import { ProjectsSummary } from '../../core/models/projects.model';
 import { DashboardApiService } from '../../core/services/dashboard-api.service';
 import { OnboardingStateService } from '../../core/services/onboarding-state.service';
 import { QuickCreateEventsService } from '../../core/services/quick-create-events.service';
 import { RoutineEventsService } from '../../core/services/routine-events.service';
 import { RoutinesApiService } from '../../core/services/routines-api.service';
+import { ProjectsApiService } from '../../core/services/projects-api.service';
 import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
 
 @Component({
@@ -70,6 +72,21 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
         }
       }
 
+      @if (projectError()) {
+        <p class="api-error" role="status">No pudimos cargar tus proyectos.</p>
+      } @else if (projectSummary(); as projects) {
+        @if (projects.highestProgressProject; as project) {
+          <section class="surface-card routine-card">
+            <div class="card-head"><h2 class="section-card-title">Proyecto principal</h2><a class="card-link" [routerLink]="['/projects', project.id]">Ver proyecto</a></div>
+            <strong>{{ project.name }} · {{ project.progressPercent ?? 0 }}%</strong>
+            <p class="card-meta">Próxima tarea: {{ project.nextTask?.title || 'Sin tareas próximas' }}</p>
+            <div class="progress-track"><span class="progress-fill progress-fill--purple" [style.width.%]="project.progressPercent ?? 0"></span></div>
+          </section>
+        } @else {
+          <section class="surface-card setup-card"><h2 class="section-card-title">Proyectos</h2><p class="section-card-copy">Agrega un proyecto para dar seguimiento a tus avances.</p><a class="card-link" routerLink="/projects">Crear proyecto →</a></section>
+        }
+      }
+
       @if (homeSummary.activeDays || homeSummary.streak) {
         <section class="surface-card">
           <div class="card-head"><h2 class="section-card-title">Progreso anual</h2><a class="card-link" routerLink="/progress">Ver</a></div>
@@ -106,18 +123,23 @@ export class HomePage {
   private readonly onboarding = inject(OnboardingStateService);
   private readonly events = inject(QuickCreateEventsService);
   private readonly routinesApi = inject(RoutinesApiService);
+  private readonly projectsApi = inject(ProjectsApiService);
   private readonly routineEvents = inject(RoutineEventsService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly apiError = signal(false);
   protected readonly routineSummary = signal<RoutineSummary | null>(null);
   protected readonly routineError = signal(false);
+  protected readonly projectSummary = signal<ProjectsSummary | null>(null);
+  protected readonly projectError = signal(false);
   protected readonly today = new Intl.DateTimeFormat('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date()).toUpperCase();
 
   constructor() {
     this.loadSummary();
     this.loadRoutineSummary();
+    this.loadProjectSummary();
     this.events.moneyChanged$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadSummary());
     this.routineEvents.changed$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadRoutineSummary());
+    this.events.projectChanged$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadProjectSummary());
   }
 
   private loadSummary() {
@@ -131,6 +153,10 @@ export class HomePage {
 
   private loadRoutineSummary() {
     this.routinesApi.getSummary().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (summary) => { this.routineError.set(false); this.routineSummary.set(summary); }, error: () => { this.routineError.set(true); this.routineSummary.set(null); } });
+  }
+
+  private loadProjectSummary() {
+    this.projectsApi.getSummary().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (summary) => { this.projectError.set(false); this.projectSummary.set(summary); }, error: () => { this.projectError.set(true); this.projectSummary.set(null); } });
   }
 
   get homeSummary() { return this.summary(); }

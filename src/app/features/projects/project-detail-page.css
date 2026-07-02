@@ -1,0 +1,20 @@
+.back { color: #b8beff; text-decoration: none; }
+.overview, .section-stack { display: grid; gap: 14px; }
+.badges, .dates, .task-meta { display: flex; flex-wrap: wrap; gap: 8px; color: var(--color-text-secondary); font-size: .82rem; }
+.meta, .task p { margin: 0; color: var(--color-text-secondary); }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.task { display: grid; gap: 13px; }
+.task.done strong { color: var(--color-text-secondary); text-decoration: line-through; }
+label { display: grid; gap: 7px; color: var(--color-text-secondary); font-size: .82rem; font-weight: 650; }
+select { width: 100%; border: 1px solid var(--color-border); border-radius: 13px; padding: 12px; background: var(--color-background-secondary); color: var(--color-text); color-scheme: dark; font: inherit; }
+button { border: 0; border-radius: 13px; padding: 12px; background: var(--color-purple); color: white; cursor: pointer; font-weight: 750; }
+button.secondary { border: 1px solid var(--color-border); background: transparent; color: var(--color-text-secondary); }
+button.danger { background: rgb(255 77 109 / .14); color: var(--color-red); }
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.money-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.money-grid div { display: grid; gap: 6px; min-width: 0; }
+.money-grid span { color: var(--color-text-secondary); font-size: .75rem; }
+.money-grid strong { overflow-wrap: anywhere; }
+.state { display: grid; justify-items: start; gap: 10px; color: var(--color-text-secondary); }
+.state.error { color: var(--color-red); }
+@media (max-width: 380px) { .money-grid { grid-template-columns: 1fr; } }

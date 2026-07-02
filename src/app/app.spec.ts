@@ -16,6 +16,8 @@ import { HabitsPage } from './features/habits/habits-page';
 import { RoutinesApiService } from './core/services/routines-api.service';
 import { RoutineSetupPage } from './features/habits/routine-setup-page';
 import { ProgressApiService } from './core/services/progress-api.service';
+import { ProjectsApiService } from './core/services/projects-api.service';
+import { ProjectsPage } from './features/projects/projects-page';
 
 describe('App', () => {
   beforeEach(async () => {
@@ -278,5 +280,25 @@ describe('App', () => {
     expect(summary.debtLabel).toBe('Deuda bancaria');
     expect(summary.nextDebtPayment).toBe(2372.85);
     expect(summary.saved).toBe(500);
+  });
+
+  it('should keep a real empty projects response distinct from an API error', () => {
+    const fixture = TestBed.createComponent(ProjectsPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('http://localhost:3000/api/projects').flush([]);
+    http.expectOne('http://localhost:3000/api/projects/summary').flush({ total: 0, active: 0, planned: 0, paused: 0, completed: 0, cancelled: 0, archived: 0, nearCompletion: 0, upcomingTasks: [] });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Aún no tienes proyectos.');
+    expect(fixture.nativeElement.textContent).not.toContain('No pudimos cargar tus proyectos.');
+  });
+
+  it('should update tasks through the Phase 6 endpoint', () => {
+    const api = TestBed.inject(ProjectsApiService);
+    const http = TestBed.inject(HttpTestingController);
+    api.updateProjectTask('task-1', { status: 'completed' }).subscribe();
+    const request = http.expectOne('http://localhost:3000/api/projects/tasks/task-1');
+    expect(request.request.method).toBe('PATCH');
+    expect(request.request.body).toEqual({ status: 'completed' });
+    request.flush({ id: 'task-1', projectId: 'project-1', title: 'Detalle', priority: 'high', status: 'completed' });
   });
 });

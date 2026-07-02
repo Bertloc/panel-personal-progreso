@@ -52,6 +52,12 @@ export const routes: Routes = [
       import('./features/projects/projects-page').then((m) => m.ProjectsPage),
   },
   {
+    path: 'projects/:id',
+    canActivate: [onboardingGuard],
+    loadComponent: () =>
+      import('./features/projects/project-detail-page').then((m) => m.ProjectDetailPage),
+  },
+  {
     path: 'settings',
     canActivate: [onboardingGuard],
     loadComponent: () => import('./features/settings/settings-page').then((m) => m.SettingsPage),

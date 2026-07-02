@@ -1,217 +1,136 @@
-import { Component, inject, signal } from '@angular/core';
-import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
-import { PriorityTask, ProjectCard } from '../../core/models/projects.model';
-import { PROJECTS_FALLBACK } from '../../core/fallbacks/projects.fallback';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { RouterLink } from '@angular/router';
+import { catchError, finalize, map, of, switchMap } from 'rxjs';
+import { Project, ProjectPriority, ProjectsSummary, ProjectStatus, ProjectTask } from '../../core/models/projects.model';
 import { ProjectsApiService } from '../../core/services/projects-api.service';
-import { mapProjectsView } from '../../core/mappers/api.mapper';
-import { catchError, forkJoin, map, of, switchMap } from 'rxjs';
+import { QuickCreateEventsService } from '../../core/services/quick-create-events.service';
+import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
+import { ProjectFormModal } from './project-form-modal';
 
 @Component({
   selector: 'app-projects-page',
-  imports: [AppCurrencyPipe],
+  imports: [AppCurrencyPipe, ProjectFormModal, RouterLink],
   template: `
     <div class="page-stack">
       <header class="page-header">
-        <p class="page-eyebrow">En marcha</p>
+        <p class="page-eyebrow">Tus proyectos</p>
         <h1 class="page-title">Proyectos</h1>
-        <p class="page-copy">Tus prioridades y próximos pasos.</p>
+        <p class="page-copy">Organiza proyectos, tareas, prioridades y avance real.</p>
+        <button class="primary" type="button" (click)="openCreate()">Crear proyecto</button>
       </header>
 
-      <section class="mini-grid">
-        @for (card of summaryCards; track card.label) {
-          <article class="surface-card summary-card">
-            <p class="card-label">{{ card.label }}</p>
-            <strong>{{ card.value }}</strong>
-            <p class="card-meta">{{ card.copy }}</p>
-          </article>
+      @if (loading()) { <section class="surface-card state">Cargando proyectos…</section> }
+      @else if (error()) {
+        <section class="surface-card state error" role="alert"><strong>No pudimos cargar tus proyectos.</strong><span>No se mostraron datos de ejemplo.</span><button type="button" (click)="load()">Reintentar</button></section>
+      } @else {
+        @if (summaryError()) { <p class="warning" role="status">El resumen del servidor no respondió; mostramos el cálculo disponible de tus proyectos.</p> }
+        <section class="summary-grid">
+          <article class="surface-card summary"><span>Activos</span><strong>{{ summary()?.active ?? 0 }}</strong></article>
+          <article class="surface-card summary"><span>Cerca de terminar</span><strong>{{ summary()?.nearCompletion ?? 0 }}</strong></article>
+          <article class="surface-card summary"><span>Pausados</span><strong>{{ summary()?.paused ?? 0 }}</strong></article>
+          <article class="surface-card summary"><span>Completados</span><strong>{{ summary()?.completed ?? 0 }}</strong></article>
+        </section>
+
+        @if (summary()?.budget; as budget) {
+          <section class="surface-card budget"><div class="split-line"><div><p class="card-label">Presupuesto de proyectos</p><strong>{{ budget.spent | appCurrency }} gastado</strong></div><span>{{ budget.remaining | appCurrency }} disponible</span></div><p class="card-meta">Planeado: {{ budget.planned | appCurrency }}</p></section>
         }
-      </section>
 
-      <section class="surface-card featured-card">
-        <span class="status-badge status-badge--purple">{{ featured.status }}</span>
-        <h2 class="featured-title">{{ featured.name }}</h2>
-        <p class="section-card-copy">Siguiente: {{ featured.next }}</p>
+        @if (featured(); as project) {
+          <section class="surface-card featured">
+            <div class="split-line"><span [class]="statusClass(project.status)">{{ statusLabel(project.status) }}</span><span [class]="priorityClass(project.priority)">{{ priorityLabel(project.priority) }}</span></div>
+            <h2>{{ project.name }}</h2>
+            <p class="card-meta">{{ project.nextTask?.title || 'Sin tareas próximas' }}@if (project.targetDate) { · Meta {{ formatDate(project.targetDate) }} }</p>
+            <div class="split-line progress-copy"><span>Avance</span><strong>{{ progress(project) }}%</strong></div>
+            <div class="progress-track"><span class="progress-fill progress-fill--purple" [style.width.%]="progress(project)"></span></div>
+            <a class="primary link" [routerLink]="['/projects', project.id]">Ver detalle</a>
+          </section>
+        }
 
-        <div class="split-line split-line--bottom">
-          <span class="section-card-copy">Progreso</span>
-          <strong>{{ featured.progress }}%</strong>
-        </div>
+        @if (!visibleProjects().length) {
+          <section class="surface-card state"><strong>Aún no tienes proyectos.</strong><button type="button" (click)="openCreate()">Crear proyecto</button></section>
+        } @else {
+          <section class="section-stack">
+            <h2 class="section-title">Tus proyectos</h2>
+            @for (project of visibleProjects(); track project.id) {
+              <article class="surface-card project-card">
+                <div class="split-line"><div><strong>{{ project.name }}</strong><p class="card-meta">{{ categoryLabel(project.category) }}</p></div><span [class]="statusClass(project.status)">{{ statusLabel(project.status) }}</span></div>
+                <div class="meta-row"><span [class]="priorityClass(project.priority)">{{ priorityLabel(project.priority) }}</span><span>{{ project.completedTasks ?? 0 }}/{{ project.tasksCount ?? 0 }} tareas</span>@if (project.targetDate) { <span>Meta {{ formatDate(project.targetDate) }}</span> }</div>
+                <div class="split-line progress-copy"><span>Avance</span><strong>{{ progress(project) }}%</strong></div>
+                <div class="progress-track"><span class="progress-fill" [style.width.%]="progress(project)"></span></div>
+                @if (project.consumesMoney) { <p class="card-meta">Costo: {{ project.actualCost ?? 0 | appCurrency }} de {{ project.budgetAmount ?? 0 | appCurrency }}</p> }
+                <div class="actions"><a class="primary link" [routerLink]="['/projects', project.id]">Abrir</a><button class="secondary" type="button" (click)="openEdit(project)">Editar</button><button class="danger" type="button" (click)="archive(project)">Archivar</button></div>
+              </article>
+            }
+          </section>
+        }
 
-        <div class="progress-track" aria-hidden="true">
-          <span class="progress-fill progress-fill--purple" [style.width.%]="featured.progress"></span>
-        </div>
-
-        <button class="featured-button" type="button">Continuar</button>
-      </section>
-
-      <section class="section-block">
-        <div class="section-header">
-          <h2 class="section-title">Presupuestos de proyecto</h2>
-        </div>
-
-        <div class="mini-grid">
-          @for (budget of projectBudgets; track budget.name) {
-            <article class="surface-card budget-card">
-              <p class="card-label">{{ budget.name }}</p>
-              <div class="split-line split-line--bottom">
-                <strong>{{ budget.spent | appCurrency }}</strong>
-                <span class="card-meta">{{ getProgressPercent(budget.spent, budget.limit) }}%</span>
-              </div>
-              <p class="card-meta">Límite: {{ budget.limit | appCurrency }}</p>
-              <div class="progress-track" aria-hidden="true">
-                <span
-                  class="progress-fill progress-fill--blue"
-                  [style.width.%]="getProgressPercent(budget.spent, budget.limit)"
-                ></span>
-              </div>
-            </article>
-          }
-        </div>
-      </section>
-
-      <section class="surface-card">
-        <h2 class="section-card-title">Prioridad</h2>
-
-        <div class="list-card">
-          @for (task of priorityTasks; track task.name) {
-            <div class="list-row">
-              <span class="habit-check" [class.habit-check--done]="task.done"></span>
-              <span class="habit-name" [class.habit-name--done]="task.done">{{ task.name }}</span>
-              <span class="status-badge" [class]="getPriorityClass(task.priority)">{{ task.priority }}</span>
-            </div>
-          }
-        </div>
-      </section>
-
-      <section class="section-block">
-        <div class="section-header">
-          <h2 class="section-title">Proyectos activos</h2>
-        </div>
-
-        <div class="project-list">
-          @for (project of projects; track project.name) {
-            <article class="surface-card project-card">
-              <div class="split-line">
-                <strong>{{ project.name }}</strong>
-                <span class="status-badge" [class]="getProjectStatusClass(project.tone)">{{ project.status }}</span>
-              </div>
-              <p class="card-meta">{{ project.tasks }}</p>
-              <div class="progress-track" aria-hidden="true">
-                <span
-                  class="progress-fill"
-                  [class]="'progress-fill progress-fill--' + project.tone"
-                  [style.width.%]="project.progress"
-                ></span>
-              </div>
-            </article>
-          }
-        </div>
-      </section>
+        @if (upcomingTasks().length) {
+          <section class="surface-card section-stack"><h2 class="section-card-title">Tareas próximas</h2>
+            @for (task of upcomingTasks(); track task.id) { <article class="task"><div><strong>{{ task.title }}</strong><p class="card-meta">Proyecto: {{ task.projectName || projectName(task.projectId) }}</p></div><div class="meta-row"><span [class]="priorityClass(task.priority)">{{ priorityLabel(task.priority) }}</span><span>{{ task.dueDate ? formatDate(task.dueDate) : 'Sin fecha' }}</span><span>{{ taskStatusLabel(task.status) }}</span></div></article> }
+          </section>
+        }
+      }
     </div>
+
+    @if (editorOpen()) { <app-project-form-modal [project]="editing()" (close)="closeEditor()" (saved)="closeEditor()" /> }
   `,
-  styles: `
-    .summary-card strong,
-    .featured-title {
-      display: block;
-      margin: 8px 0 4px;
-      font-size: 1.9rem;
-      line-height: 1.05;
-      letter-spacing: -0.05em;
-    }
-
-    .featured-card {
-      background:
-        radial-gradient(circle at top right, rgb(124 109 255 / 0.22), transparent 38%),
-        linear-gradient(180deg, #1b1b58, #191b39 68%, #171a23);
-      border-color: rgb(124 109 255 / 0.24);
-    }
-
-    .featured-button {
-      width: 100%;
-      margin-top: 16px;
-      padding: 14px 18px;
-      border: 0;
-      border-radius: 16px;
-      background: white;
-      color: #2d38d0;
-      font-weight: 800;
-    }
-
-    .section-block {
-      display: grid;
-      gap: 12px;
-    }
-
-    .section-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .section-title {
-      margin: 0;
-      font-size: 1rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: var(--color-text-secondary);
-    }
-
-    .budget-card strong {
-      font-size: 1.4rem;
-    }
-
-    .project-list {
-      display: grid;
-      gap: 12px;
-    }
-
-    .project-card {
-      padding: 18px;
-    }
-
-    .habit-name--done {
-      text-decoration: line-through;
-      color: var(--color-text-secondary);
-    }
-  `,
+  styleUrl: './projects-page.css',
 })
 export class ProjectsPage {
-  private readonly view = signal(PROJECTS_FALLBACK);
-  private readonly projectsApi = inject(ProjectsApiService);
-  protected get summaryCards() { return this.view().summaryCards; }
-  protected get projectBudgets() { return this.view().projectBudgets; }
-  protected get priorityTasks() { return this.view().priorityTasks; }
-  protected get projects() { return this.view().projects; }
-  protected get featured() { return this.view().featured ?? PROJECTS_FALLBACK.featured!; }
+  private readonly api = inject(ProjectsApiService);
+  private readonly events = inject(QuickCreateEventsService);
+  private readonly destroyRef = inject(DestroyRef);
+  protected readonly projects = signal<Project[]>([]);
+  protected readonly summary = signal<ProjectsSummary | null>(null);
+  protected readonly loading = signal(true);
+  protected readonly error = signal(false);
+  protected readonly summaryError = signal(false);
+  protected readonly editorOpen = signal(false);
+  protected readonly editing = signal<Project | null>(null);
+  protected readonly visibleProjects = computed(() => this.projects().filter(({ status }) => status !== 'archived'));
+  protected readonly featured = computed(() => {
+    const summaryProject = this.summary()?.highestProgressProject;
+    return summaryProject && summaryProject.status !== 'archived' ? summaryProject : [...this.visibleProjects()].filter(({ status }) => status === 'active').sort((a, b) => progressOf(b) - progressOf(a))[0] ?? null;
+  });
+  protected readonly upcomingTasks = computed(() => (this.summary()?.upcomingTasks ?? []).map((task) => ({ ...task, projectName: task.projectName || this.projectName(task.projectId) })));
 
-  constructor() {
-    this.projectsApi.getProjects().pipe(
-      switchMap((projects) => {
-        const active = projects.filter((project) => project.status === 'active');
-        return active.length ? forkJoin({ projects: of(projects), active: of(active), tasks: forkJoin(active.map((project) => this.projectsApi.getProjectTasks(project.id))), budgets: forkJoin(active.map((project) => this.projectsApi.getProjectBudgets(project.id))) }) : of({ projects, active, tasks: [], budgets: [] });
-      }),
-      map(({ projects, active, tasks, budgets }) => mapProjectsView(projects, Object.fromEntries(active.map((project, index) => [project.id, tasks[index] ?? []])), Object.fromEntries(active.map((project, index) => [project.id, budgets[index] ?? []])))),
-      catchError(() => of(PROJECTS_FALLBACK)),
-    ).subscribe((view) => this.view.set(view));
+  constructor() { this.load(); this.events.projectChanged$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.load()); }
+
+  protected load(): void {
+    this.loading.set(true); this.error.set(false); this.summaryError.set(false);
+    this.api.getProjects().pipe(
+      switchMap((projects) => this.api.getSummary().pipe(
+        catchError(() => { this.summaryError.set(true); return of(summaryFrom(projects)); }),
+        map((summary) => ({ projects, summary })),
+      )), finalize(() => this.loading.set(false)), takeUntilDestroyed(this.destroyRef),
+    ).subscribe({ next: ({ projects, summary }) => { this.projects.set(projects); this.summary.set(summary); }, error: () => { this.projects.set([]); this.summary.set(null); this.error.set(true); } });
   }
 
-  protected getProgressPercent(used: number, limit: number): number {
-    return Math.min(100, Math.round((used / limit) * 100));
-  }
+  protected openCreate(): void { this.editing.set(null); this.editorOpen.set(true); }
+  protected openEdit(project: Project): void { this.editing.set(project); this.editorOpen.set(true); }
+  protected closeEditor(): void { this.editorOpen.set(false); this.editing.set(null); }
+  protected archive(project: Project): void { if (!confirm(`¿Archivar ${project.name}?`)) return; this.api.deleteProject(project.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: () => this.events.notifyProjectChanged(), error: () => this.error.set(true) }); }
+  protected progress(project: Project): number { return progressOf(project); }
+  protected projectName(id: string): string { return this.projects().find((project) => project.id === id)?.name ?? 'Proyecto'; }
+  protected statusLabel(status: ProjectStatus): string { return ({ planned: 'Planeado', active: 'Activo', paused: 'En pausa', completed: 'Completado', cancelled: 'Cancelado', archived: 'Archivado' })[status]; }
+  protected taskStatusLabel(status: ProjectTask['status']): string { return ({ pending: 'Pendiente', in_progress: 'En progreso', blocked: 'Bloqueada', completed: 'Completada', cancelled: 'Cancelada' })[status]; }
+  protected priorityLabel(priority: ProjectPriority): string { return ({ low: 'Baja', medium: 'Media', high: 'Alta', urgent: 'Urgente' })[priority]; }
+  protected priorityClass(priority: ProjectPriority): string { return `status-badge status-badge--${priority === 'urgent' || priority === 'high' ? 'red' : priority === 'medium' ? 'orange' : 'green'}`; }
+  protected statusClass(status: ProjectStatus): string { return `status-badge status-badge--${status === 'completed' ? 'green' : status === 'paused' ? 'orange' : status === 'cancelled' || status === 'archived' ? 'red' : 'purple'}`; }
+  protected categoryLabel(category?: string | null): string { return ({ personal: 'Personal', school: 'Escuela', work: 'Trabajo', finance: 'Finanzas', health: 'Salud', learning: 'Aprendizaje', other: 'Otro' } as Record<string, string>)[category ?? ''] ?? category ?? 'Sin categoría'; }
+  protected formatDate(value: string): string { return new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${value.slice(0, 10)}T12:00:00`)); }
+}
 
-  protected getPriorityClass(priority: PriorityTask['priority']): string {
-    if (priority === 'Alta') {
-      return 'status-badge status-badge--red';
-    }
+function progressOf(project: Project): number {
+  if (project.progressPercent !== undefined) return Math.max(0, Math.min(100, Math.round(Number(project.progressPercent) || 0)));
+  return project.tasksCount ? Math.round(((project.completedTasks ?? 0) / project.tasksCount) * 100) : 0;
+}
 
-    if (priority === 'Media') {
-      return 'status-badge status-badge--orange';
-    }
-
-    return 'status-badge status-badge--green';
-  }
-
-  protected getProjectStatusClass(tone: ProjectCard['tone']): string {
-    return `status-badge status-badge--${tone}`;
-  }
+function summaryFrom(projects: Project[]): ProjectsSummary {
+  const count = (status: ProjectStatus) => projects.filter((project) => project.status === status).length;
+  const planned = projects.filter(({ consumesMoney }) => consumesMoney).reduce((sum, project) => sum + (Number(project.budgetAmount) || 0), 0);
+  const spent = projects.filter(({ consumesMoney }) => consumesMoney).reduce((sum, project) => sum + (Number(project.actualCost) || 0), 0);
+  const active = projects.filter(({ status }) => status === 'active');
+  return { total: projects.length, active: active.length, planned: count('planned'), paused: count('paused'), completed: count('completed'), cancelled: count('cancelled'), archived: count('archived'), nearCompletion: projects.filter((project) => progressOf(project) >= 80 && progressOf(project) < 100).length, highestProgressProject: [...active].sort((a, b) => progressOf(b) - progressOf(a))[0] ?? null, upcomingTasks: [], budget: planned || spent ? { planned, spent, remaining: planned - spent } : null };
 }

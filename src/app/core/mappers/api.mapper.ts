@@ -6,7 +6,6 @@ import { DebtApi } from '../models/debts.model';
 import { HabitApi, HabitsView } from '../models/habits.model';
 import { DebtInfo, ExpenseApi, MoneyCategory, MoneyCategoryApi, MoneyView, Paycheck, PaymentItem, RecentExpense } from '../models/money.model';
 import { HeatmapApiDay, HeatmapApiResponse, ProgressTodayApi, ProgressView } from '../models/progress.model';
-import { ProjectApi, ProjectBudgetApi, ProjectCard, ProjectsView, ProjectTaskApi } from '../models/projects.model';
 import { SavingsGoal, SavingsGoalApi } from '../models/savings.model';
 import { SettingsApi } from '../models/settings.model';
 import { IncomeSource } from '../models/income.model';
@@ -102,19 +101,4 @@ export function mapProgressView(heatmapResponse: HeatmapApiResponse | HeatmapApi
   const days = response.days ?? response.heatmap ?? [];
   const months = response.monthlyConsistency?.map((month) => ({ name: month.name ?? month.month ?? '', percent: clampPercent(month.percent) })) ?? [];
   return { heatmap: mapHeatmapDays(days, 126), activeDays: toNumber(today.activeDays) || days.filter((day) => toNumber(day.value ?? day.score) > 0).length, streak: toNumber(today.streak), consistency: clampPercent(today.consistency), longestStreak: toNumber(today.longestStreak), bestMonth: today.bestMonth ?? '—', bestMonthDays: toNumber(today.bestMonthDays), monthlyConsistency: months };
-}
-
-const statusLabels: Record<string, string> = { planned: 'Planeado', active: 'Activo', paused: 'En pausa', completed: 'Completado', cancelled: 'Cancelado' };
-const priorityLabels: Record<string, 'Alta' | 'Media' | 'Baja'> = { high: 'Alta', medium: 'Media', low: 'Baja' };
-export function mapProjectsView(projects: ProjectApi[], tasksByProject: Record<string, ProjectTaskApi[]>, budgetsByProject: Record<string, ProjectBudgetApi[]>): ProjectsView {
-  const active = projects.filter((project) => project.status === 'active');
-  const allTasks = projects.flatMap((project) => tasksByProject[project.id] ?? []);
-  const cards: ProjectCard[] = projects.map((project, index) => {
-    const tasks = tasksByProject[project.id] ?? []; const done = tasks.filter((task) => task.completed || task.status === 'completed').length;
-    return { name: project.name, status: statusLabels[project.status ?? ''] ?? project.status ?? 'Planeado', progress: project.progress === undefined ? (tasks.length ? Math.round((done / tasks.length) * 100) : 0) : clampPercent(project.progress), tasks: `${done}/${tasks.length} tareas`, tone: (['purple', 'blue', 'green'] as const)[index % 3] };
-  });
-  const priorityTasks = allTasks.filter((task) => !task.completed && task.status !== 'completed').sort((a, b) => ['high', 'medium', 'low'].indexOf(a.priority ?? 'low') - ['high', 'medium', 'low'].indexOf(b.priority ?? 'low')).slice(0, 5).map((task) => ({ name: task.name ?? task.title ?? 'Tarea', done: false, priority: priorityLabels[task.priority ?? ''] ?? 'Baja' }));
-  const projectBudgets = projects.flatMap((project) => (budgetsByProject[project.id] ?? []).map((budget) => ({ name: budget.name ?? budget.category ?? project.name, spent: toNumber(budget.spent ?? budget.used), limit: toNumber(budget.limit ?? budget.amount) })));
-  const featuredProject = active[0] ?? projects[0]; const featuredTasks = featuredProject ? tasksByProject[featuredProject.id] ?? [] : [];
-  return { summaryCards: [{ label: 'Activos', value: `${active.length} proyectos`, copy: `${cards.filter((card) => card.progress >= 80).length} cerca de terminar` }, { label: 'Tiempo', value: '—', copy: 'esta semana' }], projectBudgets, priorityTasks, projects: cards, featured: featuredProject ? { name: featuredProject.name, next: featuredTasks.find((task) => !task.completed && task.status !== 'completed')?.name ?? featuredTasks.find((task) => !task.completed)?.title ?? 'Sin tareas pendientes', progress: cards.find((card) => card.name === featuredProject.name)?.progress ?? 0, status: statusLabels[featuredProject.status ?? ''] ?? featuredProject.status ?? 'Planeado' } : undefined };
 }
