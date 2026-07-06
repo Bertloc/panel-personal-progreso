@@ -19,8 +19,11 @@ import { AppCurrencyPipe } from '../../../shared/pipes/app-currency.pipe';
           <label>Nombre <input formControlName="name" /></label>
           <label>Monto <input formControlName="amount" type="number" min="0.01" step="0.01" /></label>
           <label>Frecuencia <select formControlName="frequency">@for (frequency of frequencies; track frequency) { <option [value]="frequency">{{ frequency }}</option> }</select></label>
-          <label>Día de pago <input formControlName="dueDay" type="number" min="1" max="31" /></label>
-          <label>Próxima fecha <input formControlName="nextDueDate" type="date" /></label>
+          @if (form.controls.frequency.value === 'monthly') {
+            <label>Día del mes <input formControlName="dueDay" type="number" min="1" max="31" /></label>
+          } @else {
+            <label>Próxima fecha <input formControlName="nextDueDate" type="date" /></label>
+          }
           <label>Categoría <select formControlName="categoryId"><option value="">Sin categoría</option>@for (category of categories(); track category.id) { <option [value]="category.id">{{ category.name }}</option> }</select></label>
           <label class="check"><input formControlName="isFixed" type="checkbox" /> Pago fijo</label>
           <label class="full">Notas <textarea formControlName="notes" rows="2"></textarea></label>
@@ -59,7 +62,7 @@ export class RecurringPaymentsManager {
   protected save() {
     if (this.form.invalid || this.saving()) return;
     const value = this.form.getRawValue(); const id = this.editingId();
-    const payload = { ...value, dueDay: value.dueDay || null, nextDueDate: value.nextDueDate || null, categoryId: value.categoryId || null, notes: value.notes || null, isActive: true };
+    const payload = { ...value, dueDay: value.frequency === 'monthly' ? value.dueDay || undefined : undefined, nextDueDate: value.frequency === 'monthly' ? undefined : value.nextDueDate || undefined, categoryId: value.categoryId || undefined, notes: value.notes || undefined };
     this.saving.set(true); this.error.set('');
     (id ? this.api.updateRecurringPayment(id, payload) : this.api.createRecurringPayment(payload)).pipe(finalize(() => this.saving.set(false))).subscribe({ next: () => { this.reset(); this.events.notifyMoneyChanged(); this.load(); }, error: () => this.error.set('No se pudo guardar el pago recurrente.') });
   }

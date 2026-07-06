@@ -23,6 +23,7 @@ import { AuthService } from './core/services/auth.service';
 import { authInterceptor } from './core/interceptors/auth.interceptor';
 import { firstValueFrom, of } from 'rxjs';
 import { OnboardingStateService } from './core/services/onboarding-state.service';
+import { priorityToClass, priorityToColor } from './core/utils/priority-color.util';
 
 let accessToken: string | null = null;
 const authStub = {
@@ -271,12 +272,17 @@ describe('App', () => {
     let result = { activeDays: 0, filter: '' };
     api.getHeatmap('routine', 2026).subscribe((response) => result = { activeDays: response.summary.activeDays, filter: response.filter });
 
-    http.expectOne((request) => request.url === 'http://localhost:3000/api/progress/heatmap' && request.params.get('filter') === 'routine' && request.params.get('year') === '2026').flush({
-      filter: 'habits', year: 2026, items: [{ date: '2026-07-01', value: 75, level: 3, status: 'good' }],
+    http.expectOne((request) => request.url === 'http://localhost:3000/api/progress/heatmap' && request.params.get('filter') === 'habits' && request.params.get('year') === '2026').flush({
+      filter: 'habits', year: 2026, items: [{ progressDate: '2026-07-01T00:00:00.000Z', value: 75, level: 3, status: 'good' }],
       summary: { average: 75, activeDays: 1, excellentDays: 0, currentStreak: 1 },
     });
 
     expect(result).toEqual({ activeDays: 1, filter: 'routine' });
+  });
+
+  it('should derive category color and badge from priority', () => {
+    expect(priorityToColor('high')).toBe('#ff4d6d');
+    expect(priorityToClass('essential')).toBe('status-badge status-badge--purple');
   });
 
   it('should map the real dashboard contract as configured money', () => {
@@ -284,6 +290,7 @@ describe('App', () => {
       availableToday: 1397.15, periodIncome: 4730, periodSpent: 0, budgetRemaining: 700,
       currentMonthExpenses: 0, currentWeekExpenses: 2295, totalDebt: 10015,
       activeDebts: [{ id: 'debt-1', name: 'Deuda bancaria', initialAmount: 10015, currentAmount: 10015, minimumPayment: 2372.85, nextPaymentDate: '2026-07-15' }],
+      savingsCurrent: 800,
       activeSavingsGoals: [{ id: 'goal-1', name: 'Laptop', targetAmount: 15000, currentAmount: 500 }],
     });
 
@@ -291,7 +298,7 @@ describe('App', () => {
     expect(summary.debtLeft).toBe(10015);
     expect(summary.debtLabel).toBe('Deuda bancaria');
     expect(summary.nextDebtPayment).toBe(2372.85);
-    expect(summary.saved).toBe(500);
+    expect(summary.saved).toBe(800);
   });
 
   it('should keep a real empty projects response distinct from an API error', () => {

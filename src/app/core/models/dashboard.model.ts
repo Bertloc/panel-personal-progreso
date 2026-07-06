@@ -14,6 +14,7 @@ export interface DashboardSummary {
   monthlySpent?: string | number;
   monthlyLimit?: string | number;
   saved?: string | number;
+  savingsCurrent?: string | number;
   savingsLabel?: string;
   debtLeft?: string | number;
   debtLabel?: string;

@@ -98,7 +98,7 @@ export class ProjectsPage {
   constructor() { this.load(); this.events.projectChanged$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.load()); }
 
   protected load(): void {
-    this.loading.set(true); this.error.set(false); this.summaryError.set(false);
+    this.loading.set(true); this.error.set(false); this.summaryError.set(false); this.projects.set([]); this.summary.set(null);
     this.api.getProjects().pipe(
       switchMap((projects) => this.api.getSummary().pipe(
         catchError(() => { this.summaryError.set(true); return of(summaryFrom(projects)); }),

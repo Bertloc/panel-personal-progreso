@@ -11,6 +11,7 @@ import { SettingsApi } from '../models/settings.model';
 import { IncomeSource } from '../models/income.model';
 import { RecurringPayment } from '../models/recurring-payment.model';
 import { toNumber } from '../utils/number.util';
+import { priorityToTone } from '../utils/priority-color.util';
 
 const heatmapStatus = ['empty', 'low', 'medium', 'good', 'excellent'] as const;
 const clampPercent = (value: unknown) => Math.max(0, Math.min(100, Math.round(toNumber(value))));
@@ -30,9 +31,9 @@ export function mapDashboardSummaryToHomeSummary(source: DashboardSummary): Home
   const debtLeft = toNumber(source.debtLeft ?? source.totalDebt ?? debt?.currentAmount ?? debt?.remainingAmount);
   const periodSpent = toNumber(source.periodSpent ?? source.weeklySpent);
   const budgetRemaining = toNumber(source.budgetRemaining ?? source.weeklyRemaining);
-  const saved = source.saved === undefined
+  const saved = source.saved === undefined && source.savingsCurrent === undefined
     ? (source.activeSavingsGoals ?? []).reduce((total, goal) => total + toNumber(goal.currentAmount ?? goal.current), 0)
-    : toNumber(source.saved);
+    : toNumber(source.saved ?? source.savingsCurrent);
   return {
     ...HOME_FALLBACK,
     userName: source.userName ?? HOME_FALLBACK.userName,
@@ -40,14 +41,13 @@ export function mapDashboardSummaryToHomeSummary(source: DashboardSummary): Home
     availableToday: toNumber(source.availableToday), resetHours: toNumber(source.resetHours),
     weeklySpent: toNumber(source.weeklySpent ?? source.currentWeekExpenses ?? periodSpent), weeklyRemaining: budgetRemaining, weeklyLimit: toNumber(source.weeklyLimit) || periodSpent + budgetRemaining,
     monthlySpent: toNumber(source.monthlySpent ?? source.currentMonthExpenses), monthlyLimit: toNumber(source.monthlyLimit) || periodSpent + budgetRemaining, saved,
-    savingsLabel: source.savingsLabel ?? source.activeSavingsGoals?.[0]?.name ?? HOME_FALLBACK.savingsLabel, debtLeft, debtLabel: source.debtLabel ?? debt?.name ?? HOME_FALLBACK.debtLabel,
+    savingsLabel: source.savingsLabel ?? 'Ahorro en metas', debtLeft, debtLabel: source.debtLabel ?? debt?.name ?? HOME_FALLBACK.debtLabel,
     nextDebtDate: source.nextDebtDate ?? debt?.nextPaymentDate ?? HOME_FALLBACK.nextDebtDate, nextDebtPayment: toNumber(source.nextDebtPayment ?? debt?.minimumPayment), debtProgress: source.debtProgress === undefined && originalDebt ? clampPercent(((originalDebt - debtLeft) / originalDebt) * 100) : clampPercent(source.debtProgress),
     suggestedExtraPayment: toNumber(source.suggestedExtraPayment), activeDays: toNumber(source.activeDays), streak: toNumber(source.streak),
     habits: source.habits ?? source.habitsToday ?? [], heatmap: source.heatmap ? mapHeatmapDays(source.heatmap, 84) : HOME_FALLBACK.heatmap,
   };
 }
 
-const categoryTones: MoneyCategory['tone'][] = ['green', 'blue', 'purple', 'orange', 'pink'];
 export function mapMoneyView(categories: MoneyCategoryApi[], expenses: ExpenseApi[], budget: BudgetCurrentResponse, debts: DebtApi[], goals: SavingsGoalApi[], settings: SettingsApi, incomeSources: IncomeSource[] = [], recurringPayments: RecurringPayment[] = []): MoneyView {
   const limits = budget.limits ?? [];
   const mappedCategories: MoneyCategory[] = limits.map((item, index) => {
@@ -55,7 +55,7 @@ export function mapMoneyView(categories: MoneyCategoryApi[], expenses: ExpenseAp
     const apiCategory = categories.find((category) => category.name === name);
     const used = toNumber(item.used ?? item.usedAmount ?? item.spent ?? apiCategory?.used ?? apiCategory?.spent ?? expenses.filter((expense) => expense.category?.name === name || expense.categoryName === name).reduce((sum, expense) => sum + toNumber(expense.amount), 0));
     const limit = toNumber(item.limit ?? item.limitAmount ?? item.amount ?? apiCategory?.limit);
-    return { name, used, limit, tone: categoryTones[index % categoryTones.length], status: used > limit && limit > 0 ? 'Excedido' : used >= limit * 0.8 && limit > 0 ? 'Cuidado' : 'OK' };
+    return { name, used, limit, tone: priorityToTone(apiCategory?.priority), status: used > limit && limit > 0 ? 'Excedido' : used >= limit * 0.8 && limit > 0 ? 'Cuidado' : 'OK' };
   });
   const findLimit = (name: string) => mappedCategories.find((item) => item.name.toLowerCase().includes(name))?.limit ?? 0;
   const debt = debts.find(({ status }) => !status || status === 'active');

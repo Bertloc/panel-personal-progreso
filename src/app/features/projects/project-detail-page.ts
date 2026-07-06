@@ -82,7 +82,7 @@ export class ProjectDetailPage {
   constructor() { this.load(); this.events.projectChanged$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.load()); }
 
   protected load(): void {
-    this.loading.set(true); this.error.set(false);
+    this.loading.set(true); this.error.set(false); this.project.set(null); this.tasks.set([]);
     forkJoin({ project: this.api.getProject(this.id), tasks: this.api.getProjectTasks(this.id) }).pipe(finalize(() => this.loading.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({ next: ({ project, tasks }) => { this.project.set(project); this.tasks.set(tasks); }, error: () => { this.project.set(null); this.tasks.set([]); this.error.set(true); } });
   }
   protected openTask(task: ProjectTask | null = null): void { this.editingTask.set(task); this.taskEditor.set(true); }
@@ -100,6 +100,6 @@ export class ProjectDetailPage {
 
   private run(request: Observable<unknown>): void {
     this.saving.set(true); this.error.set(false);
-    request.pipe(finalize(() => this.saving.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({ next: () => this.events.notifyProjectChanged(), error: () => this.error.set(true) });
+    request.pipe(finalize(() => this.saving.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({ next: () => { this.load(); this.events.notifyProjectChanged(); }, error: () => this.error.set(true) });
   }
 }

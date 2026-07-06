@@ -58,6 +58,7 @@ export interface ProgressDayDetail {
 export interface HeatmapApiDay {
   id?: string;
   date?: string;
+  progressDate?: string;
   value?: string | number;
   level?: string | number;
   score?: string | number;

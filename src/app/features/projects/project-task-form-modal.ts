@@ -55,7 +55,7 @@ export class ProjectTaskFormModal {
   protected save(): void {
     if (this.form.invalid || this.saving()) return;
     const value = this.form.getRawValue();
-    const payload = { ...value, description: value.description || null, dueDate: value.dueDate || null };
+    const payload = { ...value, description: value.description || null, dueDate: value.dueDate || undefined, estimatedCost: value.estimatedCost ?? undefined, actualCost: value.actualCost ?? undefined, order: value.order ?? undefined };
     const request = this.task() ? this.api.updateProjectTask(this.task()!.id, payload) : this.api.createProjectTask(this.projectId(), payload);
     this.saving.set(true); this.error.set('');
     request.pipe(finalize(() => this.saving.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({

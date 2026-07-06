@@ -15,7 +15,6 @@ const FILTERS: Array<{ id: ProgressFilter; label: string; copy: string }> = [
   { id: 'routine', label: 'Rutina', copy: 'Mide qué tanto cumpliste tus actividades programadas.' },
   { id: 'debt', label: 'Deuda', copy: 'Resalta días con pagos o avances de deuda.' },
   { id: 'saving', label: 'Ahorro', copy: 'Resalta días con aportes o avances en metas.' },
-  { id: 'projects', label: 'Proyectos', copy: 'Preparado para medir tareas y avance de proyectos.' },
 ];
 
 @Component({
@@ -74,7 +73,7 @@ const FILTERS: Array<{ id: ProgressFilter; label: string; copy: string }> = [
                   <div class="month-grid">
                     @for (day of month.slots; track $index) {
                       @if (day) {
-                        <button type="button" class="heatmap-cell" [class]="heatmapClass(day.level)" [attr.title]="dayLabel(day)" [attr.aria-label]="dayLabel(day)" (click)="openDay(day)"></button>
+                        <span class="heatmap-cell" [class]="heatmapClass(day.level)" role="img" [attr.title]="dayLabel(day)" [attr.aria-label]="dayLabel(day)"></span>
                       } @else { <span aria-hidden="true"></span> }
                     }
                   </div>
@@ -131,8 +130,6 @@ const FILTERS: Array<{ id: ProgressFilter; label: string; copy: string }> = [
     .weekdays, .month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
     .weekdays { margin-bottom: 5px; color: var(--color-muted); text-align: center; font-size: .6rem; }
     .month-grid > * { width: 100%; aspect-ratio: 1; }
-    .month-grid button { min-width: 0; border: 0; cursor: pointer; }
-    .month-grid button:focus-visible { outline: 2px solid white; outline-offset: 2px; }
     .legend { display: flex; flex-wrap: wrap; gap: 9px 14px; padding-top: 16px; border-top: 1px solid var(--color-border); color: var(--color-text-secondary); font-size: .72rem; }
     .legend span { display: inline-flex; align-items: center; gap: 6px; }
     .legend i { width: 12px; height: 12px; }
@@ -171,6 +168,7 @@ export class ProgressPage {
     merge(this.refresh.pipe(startWith(undefined)), this.moneyEvents.moneyChanged$, this.routineEvents.changed$).pipe(
       switchMap(() => defer(() => {
         this.loading.set(true); this.apiError.set(false);
+        this.data.set(emptyProgress(this.year(), this.activeFilter()));
         return this.api.getHeatmap(this.activeFilter(), this.year()).pipe(
           catchError(() => { this.apiError.set(true); return of(emptyProgress(this.year(), this.activeFilter())); }),
           finalize(() => this.loading.set(false)),

@@ -1,7 +1,7 @@
-import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import { catchError, map, of, tap } from 'rxjs';
+import { catchError, finalize, map, of, tap } from 'rxjs';
 import { HOME_FALLBACK } from '../../core/fallbacks/home.fallback';
 import { mapDashboardSummaryToHomeSummary } from '../../core/mappers/api.mapper';
 import { HomeSummary } from '../../core/models/home-summary.model';
@@ -30,7 +30,9 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
         <p class="api-error" role="status">No pudimos cargar tu resumen. Tus datos guardados no se modificaron.</p>
       }
 
-      @if (financialReady) {
+      @if (loading()) {
+        <section class="surface-card loading-state" role="status">Cargando tu resumen…</section>
+      } @else if (financialReady) {
         <section class="surface-card hero-card">
           <p class="card-label">Disponible hoy</p>
           <strong class="hero-amount">{{ homeSummary.availableToday | appCurrency }}</strong>
@@ -45,8 +47,8 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
         </section>
 
         <section class="mini-grid mini-grid--3">
-          <article class="surface-card compact-card"><p class="card-label">Este mes</p><strong>{{ homeSummary.monthlySpent | appCurrency }}</strong><p class="card-meta">de {{ homeSummary.monthlyLimit | appCurrency }}</p></article>
-          <article class="surface-card compact-card"><p class="card-label">Ahorrado</p><strong class="value-green">{{ homeSummary.saved | appCurrency }}</strong><p class="card-meta">{{ homeSummary.savingsLabel }}</p></article>
+          <article class="surface-card compact-card"><p class="card-label">Gastado este mes</p><strong>{{ homeSummary.monthlySpent | appCurrency }}</strong><p class="card-meta">de presupuesto mensual: {{ homeSummary.monthlyLimit | appCurrency }}</p></article>
+          <article class="surface-card compact-card"><p class="card-label">Ahorro en metas</p><strong class="value-green">{{ homeSummary.saved | appCurrency }}</strong><p class="card-meta">{{ homeSummary.savingsLabel }}</p></article>
           <article class="surface-card compact-card"><p class="card-label">Deuda</p><strong>{{ homeSummary.debtLeft | appCurrency }}</strong><p class="card-meta">{{ homeSummary.debtLabel }}</p></article>
         </section>
       } @else if (!apiError()) {
@@ -111,6 +113,7 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
     .setup-card { display: grid; gap: 12px; background: linear-gradient(180deg, rgb(35 29 65 / .7), var(--color-card)); }
     .routine-card { display: grid; gap: 12px; }
     .api-error { margin: 0; padding: 12px 14px; border-radius: 14px; background: rgb(255 77 109 / .12); color: var(--color-red); }
+    .loading-state { color: var(--color-text-secondary); text-align: center; }
     .list-row:first-child { padding-top: 0; } .list-row:last-child { padding-bottom: 0; border-bottom: 0; }
     .heatmap-preview { display: grid; grid-template-columns: repeat(12, 1fr); gap: 5px; margin-top: 8px; }
     .heatmap-preview .heatmap-cell { min-height: 16px; aspect-ratio: 1; }
@@ -127,6 +130,10 @@ export class HomePage {
   private readonly routineEvents = inject(RoutineEventsService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly apiError = signal(false);
+  private readonly summaryLoading = signal(true);
+  private readonly routineLoading = signal(true);
+  private readonly projectLoading = signal(true);
+  protected readonly loading = computed(() => this.summaryLoading() || this.routineLoading() || this.projectLoading());
   protected readonly routineSummary = signal<RoutineSummary | null>(null);
   protected readonly routineError = signal(false);
   protected readonly projectSummary = signal<ProjectsSummary | null>(null);
@@ -143,20 +150,23 @@ export class HomePage {
   }
 
   private loadSummary() {
+    this.summaryLoading.set(true); this.summary.set(HOME_FALLBACK);
     this.dashboardApi.getSummary().pipe(
       map(mapDashboardSummaryToHomeSummary),
       tap(() => this.apiError.set(false)),
       catchError(() => { this.apiError.set(true); return of(HOME_FALLBACK); }),
-      takeUntilDestroyed(this.destroyRef),
+      finalize(() => this.summaryLoading.set(false)), takeUntilDestroyed(this.destroyRef),
     ).subscribe((summary) => this.summary.set(summary));
   }
 
   private loadRoutineSummary() {
-    this.routinesApi.getSummary().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (summary) => { this.routineError.set(false); this.routineSummary.set(summary); }, error: () => { this.routineError.set(true); this.routineSummary.set(null); } });
+    this.routineLoading.set(true); this.routineSummary.set(null);
+    this.routinesApi.getSummary().pipe(finalize(() => this.routineLoading.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({ next: (summary) => { this.routineError.set(false); this.routineSummary.set(summary); }, error: () => { this.routineError.set(true); this.routineSummary.set(null); } });
   }
 
   private loadProjectSummary() {
-    this.projectsApi.getSummary().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({ next: (summary) => { this.projectError.set(false); this.projectSummary.set(summary); }, error: () => { this.projectError.set(true); this.projectSummary.set(null); } });
+    this.projectLoading.set(true); this.projectSummary.set(null);
+    this.projectsApi.getSummary().pipe(finalize(() => this.projectLoading.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({ next: (summary) => { this.projectError.set(false); this.projectSummary.set(summary); }, error: () => { this.projectError.set(true); this.projectSummary.set(null); } });
   }
 
   get homeSummary() { return this.summary(); }

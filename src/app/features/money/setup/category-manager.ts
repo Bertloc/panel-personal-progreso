@@ -4,6 +4,7 @@ import { finalize } from 'rxjs';
 import { CategoryPriority, CategoryType, MoneyCategoryApi } from '../../../core/models/money.model';
 import { MoneyApiService } from '../../../core/services/money-api.service';
 import { QuickCreateEventsService } from '../../../core/services/quick-create-events.service';
+import { priorityToClass, priorityToColor } from '../../../core/utils/priority-color.util';
 
 @Component({
   selector: 'app-category-manager',
@@ -16,7 +17,7 @@ import { QuickCreateEventsService } from '../../../core/services/quick-create-ev
           <label>Nombre <input formControlName="name" maxlength="60" /></label>
           <label>Tipo <select formControlName="type">@for (type of types; track type.value) { <option [value]="type.value">{{ type.label }}</option> }</select></label>
           <label>Prioridad <select formControlName="priority">@for (priority of priorities; track priority.value) { <option [value]="priority.value">{{ priority.label }}</option> }</select></label>
-          <label>Color <input formControlName="color" type="color" /></label>
+          <label>Color <input [value]="priorityToColor(form.controls.priority.value)" type="color" disabled /></label>
           <label>Icono (opcional) <input formControlName="icon" maxlength="20" /></label>
           <label class="check"><input formControlName="isFixed" type="checkbox" /> Categoría fija</label>
         </div>
@@ -30,7 +31,7 @@ import { QuickCreateEventsService } from '../../../core/services/quick-create-ev
         <div class="items">
           @for (category of categories(); track category.id) {
             <article class="item">
-              <div class="item-head"><strong>{{ category.icon }} {{ category.name }}</strong><span class="status-badge">{{ category.type }}</span></div>
+              <div class="item-head"><strong>{{ category.icon }} {{ category.name }}</strong><span [class]="priorityToClass(category.priority)">{{ category.type }}</span></div>
               <p class="meta">{{ category.priority || 'sin prioridad' }} · {{ category.isFixed ? 'fija' : 'variable' }}</p>
               <div class="actions"><button class="secondary" type="button" (click)="edit(category)">Editar</button><button class="danger" type="button" (click)="remove(category)">Eliminar</button></div>
             </article>
@@ -59,14 +60,14 @@ export class CategoryManager {
   ];
   protected readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required], type: this.fb.nonNullable.control<CategoryType>('expense', Validators.required),
-    priority: this.fb.nonNullable.control<CategoryPriority>('medium'), isFixed: false, color: '#4ade80', icon: '',
+    priority: this.fb.nonNullable.control<CategoryPriority>('medium'), isFixed: false, icon: '',
   });
 
   constructor() { this.load(); }
 
   protected save() {
     if (this.form.invalid || this.saving()) return;
-    const payload = this.form.getRawValue(); const id = this.editingId();
+    const value = this.form.getRawValue(); const payload = { ...value, color: priorityToColor(value.priority) }; const id = this.editingId();
     this.saving.set(true); this.error.set('');
     (id ? this.api.updateCategory(id, payload) : this.api.createCategory(payload))
       .pipe(finalize(() => this.saving.set(false))).subscribe({
@@ -77,10 +78,13 @@ export class CategoryManager {
 
   protected edit(category: MoneyCategoryApi) {
     this.editingId.set(category.id);
-    this.form.patchValue({ name: category.name, type: category.type as CategoryType || 'expense', priority: category.priority ?? 'medium', isFixed: category.isFixed ?? false, color: category.color ?? '#4ade80', icon: category.icon ?? '' });
+    this.form.patchValue({ name: category.name, type: category.type as CategoryType || 'expense', priority: category.priority ?? 'medium', isFixed: category.isFixed ?? false, icon: category.icon ?? '' });
   }
 
-  protected cancelEdit() { this.editingId.set(null); this.form.reset({ name: '', type: 'expense', priority: 'medium', isFixed: false, color: '#4ade80', icon: '' }); }
+  protected cancelEdit() { this.editingId.set(null); this.form.reset({ name: '', type: 'expense', priority: 'medium', isFixed: false, icon: '' }); }
+
+  protected readonly priorityToColor = priorityToColor;
+  protected readonly priorityToClass = priorityToClass;
 
   protected remove(category: MoneyCategoryApi) {
     if (!confirm(`¿Eliminar ${category.name}?`)) return;

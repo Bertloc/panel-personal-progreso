@@ -12,12 +12,14 @@ import { SettingsApiService } from '../../core/services/settings-api.service';
 import { QuickCreateEventsService } from '../../core/services/quick-create-events.service';
 import { IncomeApiService } from '../../core/services/income-api.service';
 import { RecurringPaymentsApiService } from '../../core/services/recurring-payments-api.service';
+import { ActionModal } from '../../shared/components/action-modal/action-modal';
+import { RecurringPaymentsManager } from './setup/recurring-payments-manager';
 import { mapMoneyView } from '../../core/mappers/api.mapper';
-import { catchError, forkJoin, map, of, tap } from 'rxjs';
+import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
 
 @Component({
   selector: 'app-money-page',
-  imports: [AppCurrencyPipe, RouterLink],
+  imports: [ActionModal, AppCurrencyPipe, RecurringPaymentsManager, RouterLink],
   template: `
     <div class="page-stack">
       <header class="page-header">
@@ -32,11 +34,14 @@ import { catchError, forkJoin, map, of, tap } from 'rxjs';
         <p class="api-error" role="status">No pudimos cargar tus datos de dinero. Intenta de nuevo más tarde.</p>
       }
 
+      @if (loading()) {
+        <section class="surface-card loading-state" role="status">Cargando tus datos de dinero…</section>
+      } @else {
       <div class="money-data" [class.money-data--hidden]="apiError()">
       <section class="pill-row">
         @for (tab of tabs; track tab) {
-          <button class="pill" type="button" [class.pill--active]="tab === 'Presupuesto activo'">
-            {{ tab }}
+          <button class="pill" type="button" [class.pill--active]="tab === 'Presupuesto activo'" [disabled]="tab !== 'Presupuesto activo'">
+            {{ tab }}{{ tab === 'Presupuesto activo' ? '' : ' · Próximamente' }}
           </button>
         }
       </section>
@@ -71,7 +76,7 @@ import { catchError, forkJoin, map, of, tap } from 'rxjs';
       }
 
       <section class="surface-card compact-card">
-        <h2 class="section-card-title">Próximos pagos</h2>
+        <div class="card-head"><h2 class="section-card-title">Próximos pagos</h2><button class="card-link button-link" type="button" (click)="paymentModal.set(true)">Agregar</button></div>
 
         <div class="list-card">
           @for (payment of upcomingPayments; track payment.name) {
@@ -86,7 +91,7 @@ import { catchError, forkJoin, map, of, tap } from 'rxjs';
             </div>
           } @empty {
             <p class="section-card-copy">Aún no has definido próximos pagos.</p>
-            <a class="card-link" routerLink="/money/setup">Agregar pago recurrente</a>
+            <button class="card-link button-link" type="button" (click)="paymentModal.set(true)">Agregar pago recurrente</button>
           }
         </div>
       </section>
@@ -209,7 +214,12 @@ import { catchError, forkJoin, map, of, tap } from 'rxjs';
         </div>
       </section>
       </div>
+      }
     </div>
+
+    @if (paymentModal()) {
+      <app-action-modal title="Agregar próximo pago" (close)="paymentModal.set(false)"><app-recurring-payments-manager /></app-action-modal>
+    }
   `,
   styles: `
     .money-hero {
@@ -222,6 +232,8 @@ import { catchError, forkJoin, map, of, tap } from 'rxjs';
     .setup-link { display: inline-flex; width: fit-content; padding: 10px 14px; border-radius: 12px; background: var(--color-purple); color: white; text-decoration: none; font-weight: 750; }
     .money-data { display: contents; }
     .money-data--hidden { display: none; }
+    .loading-state { color: var(--color-text-secondary); text-align: center; }
+    .button-link { border: 0; background: transparent; cursor: pointer; }
 
     .api-error,
     .empty-state {
@@ -424,6 +436,8 @@ export class MoneyPage {
   private readonly quickCreateEvents = inject(QuickCreateEventsService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly apiError = signal(false);
+  protected readonly loading = signal(true);
+  protected readonly paymentModal = signal(false);
   protected readonly tabs = ['Presupuesto activo', 'Deuda', 'Ahorro'];
   protected get paycheck() { return this.view().paycheck; }
   protected get upcomingPayments() { return this.view().upcomingPayments; }
@@ -438,11 +452,12 @@ export class MoneyPage {
   }
 
   private loadMoneyView(): void {
+    this.loading.set(true); this.view.set(MONEY_FALLBACK);
     forkJoin({ categories: this.moneyApi.getCategories(), expenses: this.moneyApi.getExpenses(), budget: this.budgetsApi.getCurrentBudget(), debts: this.debtsApi.getDebts(), goals: this.savingsApi.getGoals(), settings: this.settingsApi.getSettings(), incomeSources: this.incomeApi.getSources(), recurringPayments: this.recurringApi.getRecurringPayments() }).pipe(
       map(({ categories, expenses, budget, debts, goals, settings, incomeSources, recurringPayments }) => mapMoneyView(categories, expenses, budget, debts, goals, settings, incomeSources, recurringPayments)),
       tap(() => this.apiError.set(false)),
       catchError(() => { this.apiError.set(true); return of(MONEY_FALLBACK); }),
-      takeUntilDestroyed(this.destroyRef),
+      finalize(() => this.loading.set(false)), takeUntilDestroyed(this.destroyRef),
     ).subscribe((view) => this.view.set(view));
   }
 

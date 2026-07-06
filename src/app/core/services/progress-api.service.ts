@@ -16,7 +16,7 @@ export class ProgressApiService {
 
   getTodayProgress() { return this.http.get<ApiResponse<ProgressTodayApi>>(`${this.url}/today`).pipe(map(unwrapApiResponse)); }
   getHeatmap(filter: ProgressFilter, year: number) {
-    const params = new HttpParams().set('filter', filter).set('year', year);
+    const params = new HttpParams().set('filter', filter === 'routine' ? 'habits' : filter).set('year', year);
     return this.http.get<ApiResponse<HeatmapApiResponse | HeatmapApiDay[]>>(`${this.url}/heatmap`, { params }).pipe(
       map(unwrapApiResponse),
       map((response) => normalizeHeatmap(response, filter, year)),
@@ -57,7 +57,7 @@ function normalizeDay(day: HeatmapApiDay): ProgressHeatmapDay {
   const statusLevel = ({ empty: 0, low: 1, medium: 2, ok: 2, good: 3, excellent: 4 } as Record<string, number>)[day.status ?? day.state ?? ''];
   const level = day.level === undefined ? (statusLevel ?? (value <= 4 ? clampLevel(value) : value <= 30 ? 1 : value <= 60 ? 2 : value <= 85 ? 3 : 4)) : clampLevel(day.level);
   return {
-    date: day.date ?? (/^\d{4}-\d{2}-\d{2}$/.test(day.id ?? '') ? day.id! : ''),
+    date: (day.date ?? day.progressDate ?? (/^\d{4}-\d{2}-\d{2}$/.test(day.id ?? '') ? day.id! : '')).slice(0, 10),
     value,
     level,
     status: STATUSES[level],
