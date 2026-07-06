@@ -1,8 +1,10 @@
-import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
 import { MoneyCategoryStatus } from '../../core/models/money.model';
+import { DebtApi } from '../../core/models/debts.model';
+import { SavingsGoalApi } from '../../core/models/savings.model';
 import { MONEY_FALLBACK } from '../../core/fallbacks/money.fallback';
 import { MoneyApiService } from '../../core/services/money-api.service';
 import { BudgetsApiService } from '../../core/services/budgets-api.service';
@@ -28,8 +30,6 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
         <p class="page-copy">Presupuesto, deuda y metas en un solo lugar.</p>
       </header>
 
-      <a class="setup-link" routerLink="/money/setup">Configurar dinero</a>
-
       @if (apiError()) {
         <p class="api-error" role="status">No pudimos cargar tus datos de dinero. Intenta de nuevo más tarde.</p>
       }
@@ -39,13 +39,14 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
       } @else {
       <div class="money-data" [class.money-data--hidden]="apiError()">
       <section class="pill-row">
-        @for (tab of tabs; track tab) {
-          <button class="pill" type="button" [class.pill--active]="tab === 'Presupuesto activo'" [disabled]="tab !== 'Presupuesto activo'">
-            {{ tab }}{{ tab === 'Presupuesto activo' ? '' : ' · Próximamente' }}
+        @for (tab of tabs; track tab.id) {
+          <button class="pill" type="button" [class.pill--active]="tab.id === activeTab()" [attr.aria-pressed]="tab.id === activeTab()" (click)="activeTab.set(tab.id)">
+            {{ tab.label }}
           </button>
         }
       </section>
 
+      @if (activeTab() === 'budget') {
       @if (paycheck.income > 0) {
       <section class="surface-card money-hero">
         <p class="card-label">Libre real estimado</p>
@@ -213,6 +214,53 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
           }
         </div>
       </section>
+      } @else if (activeTab() === 'debt') {
+        @if (debts().length) {
+          <section class="surface-card debt-hero">
+            <p class="card-label">Deuda total</p>
+            <strong class="hero-amount hero-amount--white">{{ debtTotal() | appCurrency }}</strong>
+            <p class="hero-note">Ya pagaste {{ debtPaid() | appCurrency }} de {{ debtOriginal() | appCurrency }} originales.</p>
+            <div class="progress-track"><span class="progress-fill progress-fill--purple" [style.width.%]="debtProgress()"></span></div>
+            <div class="summary-grid debt-summary"><div><p class="card-meta">Pago mínimo mensual</p><strong>{{ debtMinimum() | appCurrency }}</strong></div><div><p class="card-meta">Progreso liquidación</p><strong class="value-green">{{ debtProgress() }}%</strong></div></div>
+          </section>
+          <section class="section-block">
+            <div class="section-heading"><h2>Tus deudas</h2><a routerLink="/money/setup">＋ Agregar</a></div>
+            @for (debt of debts(); track debt.id) {
+              <article class="surface-card debt-card">
+                <div class="split-line"><div class="debt-name"><i [class]="'debt-dot debt-dot--' + debt.priority"></i><div><strong>{{ debt.name || 'Deuda' }}</strong><p class="card-meta">{{ debt.strategy === 'bank_plan' ? 'Plan bancario' : debt.strategy || 'Crédito' }}</p></div></div>@if (debtApr(debt); as apr) { <span [class]="debtAprClass(apr)">{{ apr }}% APR</span> }</div>
+                <div class="split-line debt-values"><div><p class="card-meta">Saldo</p><strong>{{ debtBalance(debt) | appCurrency }}</strong></div><div class="align-end"><p class="card-meta">Pago mín. <b>{{ debtMinimumOf(debt) | appCurrency }}</b></p><p class="card-meta">{{ debtDue(debt) }}</p></div></div>
+                <div class="split-line payoff"><span>Liquidado</span><strong>{{ debtProgressOf(debt) }}%</strong></div>
+                <div class="progress-track"><span [class]="debtProgressClass(debt.priority)" [style.width.%]="debtProgressOf(debt)"></span></div>
+              </article>
+            }
+          </section>
+        } @else {
+          <section class="surface-card empty-state"><h2 class="section-card-title">Sin deudas registradas</h2><p class="section-card-copy">Cuando agregues una deuda verás aquí su avance de liquidación.</p><a class="card-link" routerLink="/money/setup">Agregar deuda</a></section>
+        }
+      } @else {
+        @if (goals().length) {
+          <section class="surface-card savings-hero">
+            <p class="card-label">Ahorro acumulado</p>
+            <strong class="hero-amount">{{ savingsCurrent() | appCurrency }}</strong>
+            <p class="hero-note">Meta combinada de {{ savingsTarget() | appCurrency }} en todas tus metas.</p>
+            <div class="progress-track"><span class="progress-fill progress-fill--green" [style.width.%]="savingsProgress()"></span></div>
+            <div class="summary-grid debt-summary"><div><p class="card-meta">Aporte mensual</p><strong>{{ savingsMonthly() ? (savingsMonthly() | appCurrency) : '—' }}</strong></div><div><p class="card-meta">Avance total</p><strong class="value-green">{{ savingsProgress() }}%</strong></div></div>
+          </section>
+          <section class="section-block">
+            <div class="section-heading"><h2>Metas de ahorro</h2><a routerLink="/money/setup">＋ Agregar</a></div>
+            @for (goal of goals(); track goal.id) {
+              <article class="surface-card goal-card">
+                <div class="split-line"><div><strong>{{ goal.name }}</strong>@if (goal.targetDate) { <p class="card-meta">Meta {{ formatDate(goal.targetDate) }}</p> }</div><span class="status-badge status-badge--purple">{{ goalProgress(goal) }}%</span></div>
+                <div class="split-line goal-values"><span>{{ goalCurrent(goal) | appCurrency }} / {{ goalTarget(goal) | appCurrency }}</span>@if (goal.monthlyContribution) { <span>{{ goalMonthly(goal) | appCurrency }}/mes</span> }</div>
+                <div class="progress-track"><span class="progress-fill progress-fill--purple" [style.width.%]="goalProgress(goal)"></span></div>
+                <p class="card-meta">Falta <strong>{{ goalRemaining(goal) | appCurrency }}</strong></p>
+              </article>
+            }
+          </section>
+        } @else {
+          <section class="surface-card empty-state"><h2 class="section-card-title">Empieza una meta de ahorro</h2><p class="section-card-copy">Tus metas y su avance aparecerán aquí.</p><a class="card-link" routerLink="/money/setup">Crear meta</a></section>
+        }
+      }
       </div>
       }
     </div>
@@ -229,11 +277,11 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
       border-color: rgb(74 222 128 / 0.2);
     }
 
-    .setup-link { display: inline-flex; width: fit-content; padding: 10px 14px; border-radius: 12px; background: var(--color-purple); color: white; text-decoration: none; font-weight: 750; }
     .money-data { display: contents; }
     .money-data--hidden { display: none; }
     .loading-state { color: var(--color-text-secondary); text-align: center; }
     .button-link { border: 0; background: transparent; cursor: pointer; }
+    .pill-row { margin-top: 4px; }
 
     .api-error,
     .empty-state {
@@ -264,6 +312,8 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
       letter-spacing: -0.08em;
       color: var(--color-green);
     }
+    .hero-amount--white { color: var(--color-text); }
+    .value-green { color: var(--color-green); }
 
     .hero-note,
     .status-line,
@@ -416,6 +466,25 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
     .savings-copy {
       margin-bottom: 12px;
     }
+    .debt-hero, .savings-hero { display: grid; gap: 14px; border-color: rgb(110 112 247 / .28); background: radial-gradient(circle at top right, rgb(110 112 247 / .12), transparent 45%), var(--color-card); }
+    .savings-hero { border-color: rgb(40 215 154 / .24); background: radial-gradient(circle at top right, rgb(40 215 154 / .12), transparent 45%), var(--color-card); }
+    .debt-summary { margin: 0; }
+    .debt-summary > :last-child { text-align: right; }
+    .section-block { display: grid; gap: 12px; }
+    .section-heading { display: flex; align-items: center; justify-content: space-between; }
+    .section-heading h2 { margin: 0; font-size: 1.15rem; }
+    .section-heading a { color: var(--color-green); text-decoration: none; }
+    .debt-card, .goal-card { display: grid; gap: 14px; padding: 18px; }
+    .debt-name { display: flex; align-items: center; gap: 10px; }
+    .debt-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--color-orange); }
+    .debt-dot--urgent, .debt-dot--high { background: var(--color-red); }
+    .debt-dot--low { background: var(--color-purple); }
+    .debt-values strong { display: block; margin-top: 3px; font-size: 1.7rem; }
+    .align-end { text-align: right; }
+    .align-end b { color: var(--color-orange); }
+    .payoff, .goal-values { color: var(--color-text-secondary); font-size: .82rem; }
+    .payoff strong { color: var(--color-text); }
+    .goal-card > .card-meta strong { color: var(--color-text); }
 
     @media (max-width: 380px) {
       .summary-grid {
@@ -438,7 +507,10 @@ export class MoneyPage {
   protected readonly apiError = signal(false);
   protected readonly loading = signal(true);
   protected readonly paymentModal = signal(false);
-  protected readonly tabs = ['Presupuesto activo', 'Deuda', 'Ahorro'];
+  protected readonly activeTab = signal<'budget' | 'debt' | 'saving'>('budget');
+  protected readonly tabs = [{ id: 'budget' as const, label: 'Presupuesto' }, { id: 'debt' as const, label: 'Deuda' }, { id: 'saving' as const, label: 'Ahorro' }];
+  protected readonly debts = signal<DebtApi[]>([]);
+  protected readonly goals = signal<SavingsGoalApi[]>([]);
   protected get paycheck() { return this.view().paycheck; }
   protected get upcomingPayments() { return this.view().upcomingPayments; }
   protected get debtInfo() { return this.view().debtInfo; }
@@ -454,11 +526,11 @@ export class MoneyPage {
   private loadMoneyView(): void {
     this.loading.set(true); this.view.set(MONEY_FALLBACK);
     forkJoin({ categories: this.moneyApi.getCategories(), expenses: this.moneyApi.getExpenses(), budget: this.budgetsApi.getCurrentBudget(), debts: this.debtsApi.getDebts(), goals: this.savingsApi.getGoals(), settings: this.settingsApi.getSettings(), incomeSources: this.incomeApi.getSources(), recurringPayments: this.recurringApi.getRecurringPayments() }).pipe(
-      map(({ categories, expenses, budget, debts, goals, settings, incomeSources, recurringPayments }) => mapMoneyView(categories, expenses, budget, debts, goals, settings, incomeSources, recurringPayments)),
+      map(({ categories, expenses, budget, debts, goals, settings, incomeSources, recurringPayments }) => ({ view: mapMoneyView(categories, expenses, budget, debts, goals, settings, incomeSources, recurringPayments), debts, goals })),
       tap(() => this.apiError.set(false)),
-      catchError(() => { this.apiError.set(true); return of(MONEY_FALLBACK); }),
+      catchError(() => { this.apiError.set(true); return of({ view: MONEY_FALLBACK, debts: [], goals: [] }); }),
       finalize(() => this.loading.set(false)), takeUntilDestroyed(this.destroyRef),
-    ).subscribe((view) => this.view.set(view));
+    ).subscribe(({ view, debts, goals }) => { this.view.set(view); this.debts.set(debts.filter(({ status }) => status !== 'cancelled')); this.goals.set(goals.filter(({ status }) => status !== 'cancelled')); });
   }
 
   protected get budgetedTotal(): number { return this.categories.reduce((total, category) => total + category.limit, 0); }
@@ -498,4 +570,27 @@ export class MoneyPage {
 
     return 'status-badge status-badge--green';
   }
+
+  protected readonly debtTotal = computed(() => this.debts().reduce((sum, debt) => sum + this.debtBalance(debt), 0));
+  protected readonly debtOriginal = computed(() => this.debts().reduce((sum, debt) => sum + Number(debt.initialAmount ?? debt.originalAmount ?? debt.totalAmount ?? 0), 0));
+  protected readonly debtPaid = computed(() => Math.max(0, this.debtOriginal() - this.debtTotal()));
+  protected readonly debtMinimum = computed(() => this.debts().reduce((sum, debt) => sum + Number(debt.minimumPayment ?? debt.nextPaymentAmount ?? 0), 0));
+  protected readonly debtProgress = computed(() => this.getProgressPercent(this.debtPaid(), this.debtOriginal()));
+  protected readonly savingsCurrent = computed(() => this.goals().reduce((sum, goal) => sum + this.goalCurrent(goal), 0));
+  protected readonly savingsTarget = computed(() => this.goals().reduce((sum, goal) => sum + this.goalTarget(goal), 0));
+  protected readonly savingsMonthly = computed(() => this.goals().reduce((sum, goal) => sum + Number(goal.monthlyContribution ?? 0), 0));
+  protected readonly savingsProgress = computed(() => this.getProgressPercent(this.savingsCurrent(), this.savingsTarget()));
+  protected debtBalance(debt: DebtApi) { return Number(debt.currentAmount ?? debt.remainingAmount ?? debt.balance ?? 0); }
+  protected debtMinimumOf(debt: DebtApi) { return Number(debt.minimumPayment ?? debt.nextPaymentAmount ?? 0); }
+  protected debtProgressOf(debt: DebtApi) { const original = Number(debt.initialAmount ?? debt.originalAmount ?? debt.totalAmount ?? 0); return debt.progressPercent ?? this.getProgressPercent(original - this.debtBalance(debt), original); }
+  protected debtApr(debt: DebtApi) { return Number(debt.apr ?? debt.interestRate ?? 0); }
+  protected debtAprClass(apr: number) { return `status-badge status-badge--${apr >= 30 ? 'red' : apr > 0 ? 'orange' : 'green'}`; }
+  protected debtProgressClass(priority?: DebtApi['priority']) { return `progress-fill progress-fill--${priority === 'urgent' || priority === 'high' ? 'red' : priority === 'low' ? 'purple' : 'orange'}`; }
+  protected debtDue(debt: DebtApi) { return debt.nextPaymentDate ? `Vence ${this.formatDate(debt.nextPaymentDate)}` : debt.paymentDay ? `Vence el día ${debt.paymentDay}` : 'Sin fecha de pago'; }
+  protected goalCurrent(goal: SavingsGoalApi) { return Number(goal.currentAmount ?? goal.current ?? 0); }
+  protected goalTarget(goal: SavingsGoalApi) { return Number(goal.targetAmount ?? goal.target ?? 0); }
+  protected goalMonthly(goal: SavingsGoalApi) { return Number(goal.monthlyContribution ?? 0); }
+  protected goalProgress(goal: SavingsGoalApi) { return goal.progressPercent ?? this.getProgressPercent(this.goalCurrent(goal), this.goalTarget(goal)); }
+  protected goalRemaining(goal: SavingsGoalApi) { return Math.max(0, Number(goal.remainingAmount ?? this.goalTarget(goal) - this.goalCurrent(goal))); }
+  protected formatDate(value: string) { return new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${value.slice(0, 10)}T12:00:00`)); }
 }

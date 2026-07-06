@@ -87,7 +87,7 @@ const FILTERS: Array<{ id: ProgressFilter; label: string; copy: string }> = [
             </div>
           </section>
         } @else {
-          <section class="surface-card state"><p>Aún no hay datos para este filtro.</p></section>
+          <section class="surface-card state empty-state"><strong>Aún no hay datos para este filtro</strong><p>Registra actividad y vuelve para ver cómo crece tu mapa anual.</p></section>
         }
       }
     </div>
@@ -109,9 +109,10 @@ const FILTERS: Array<{ id: ProgressFilter; label: string; copy: string }> = [
     }
   `,
   styles: `
-    .filters { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; }
+    .filters { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+    .filters::-webkit-scrollbar { display: none; }
     .filters button, .year-row button, .state button { border: 1px solid var(--color-border); border-radius: 999px; background: var(--color-card-secondary); color: var(--color-text-secondary); padding: 10px 14px; cursor: pointer; }
-    .filters button.active { border-color: rgb(74 222 128 / .35); background: rgb(74 222 128 / .16); color: var(--color-text); }
+    .filters button.active { border-color: var(--color-green); background: rgb(40 215 154 / .12); color: var(--color-green); }
     .filter-copy { min-height: 44px; margin: -6px 2px 0; color: var(--color-text-secondary); line-height: 1.45; }
     .year-row { display: flex; align-items: center; justify-content: center; gap: 18px; }
     .year-row button { width: 40px; height: 40px; padding: 0; font-size: 1.5rem; }
@@ -119,12 +120,11 @@ const FILTERS: Array<{ id: ProgressFilter; label: string; copy: string }> = [
     .state { margin: 0; text-align: center; color: var(--color-text-secondary); }
     .state p { margin: 0; }
     .state--error { display: grid; justify-items: center; gap: 12px; color: var(--color-red); }
-    .summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-    .summary-grid article { min-width: 0; padding: 16px; }
-    .summary-grid span { display: block; color: var(--color-text-secondary); font-size: .78rem; }
-    .summary-grid strong { display: block; margin-top: 7px; overflow-wrap: anywhere; font-size: 1.25rem; }
-    .summary-grid article:last-child { grid-column: 1 / -1; }
-    .heatmap-card { display: grid; gap: 20px; }
+    .summary-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+    .summary-grid article { min-width: 0; padding: 12px 5px; border-radius: 16px; text-align: center; }
+    .summary-grid span { display: block; min-height: 2.2em; color: var(--color-text-secondary); font-size: .65rem; line-height: 1.1; }
+    .summary-grid strong { display: block; margin-top: 5px; overflow-wrap: anywhere; font-size: .85rem; }
+    .heatmap-card { display: grid; gap: 20px; padding: 16px; }
     .months { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 14px; }
     .month h3 { margin: 0 0 8px; color: var(--color-text-secondary); font-size: .85rem; text-transform: capitalize; }
     .weekdays, .month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
@@ -140,7 +140,8 @@ const FILTERS: Array<{ id: ProgressFilter; label: string; copy: string }> = [
     .detail-list div:last-child { border-bottom: 0; }
     .detail-list dt { color: var(--color-text-secondary); }
     .detail-list dd { margin: 0; text-align: right; font-weight: 700; }
-    @media (min-width: 700px) { .summary-grid { grid-template-columns: repeat(5, 1fr); } .summary-grid article:last-child { grid-column: auto; } .months { grid-template-columns: repeat(3, 1fr); } }
+    .empty-state { display: grid; gap: 8px; padding-block: 34px; }
+    @media (min-width: 700px) { .months { grid-template-columns: repeat(3, 1fr); } }
     @media (max-width: 370px) { .months { grid-template-columns: 1fr; } }
   `,
 })

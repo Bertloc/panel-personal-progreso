@@ -24,6 +24,7 @@ import { authInterceptor } from './core/interceptors/auth.interceptor';
 import { firstValueFrom, of } from 'rxjs';
 import { OnboardingStateService } from './core/services/onboarding-state.service';
 import { priorityToClass, priorityToColor } from './core/utils/priority-color.util';
+import { MoneyPage } from './features/money/money-page';
 
 let accessToken: string | null = null;
 const authStub = {
@@ -55,7 +56,13 @@ describe('App', () => {
     fixture.detectChanges();
 
     expect(mainButton.getAttribute('aria-expanded')).toBe('true');
+    expect(mainButton.textContent?.trim()).toBe('×');
     expect(fixture.nativeElement.querySelectorAll('.action')).toHaveLength(6);
+
+    fixture.nativeElement.querySelector('.backdrop').click();
+    fixture.detectChanges();
+    expect(mainButton.getAttribute('aria-expanded')).toBe('false');
+    expect(fixture.nativeElement.querySelector('.backdrop')).toBeNull();
   });
 
   it('should send a valid expense through the existing money endpoint', () => {
@@ -233,6 +240,27 @@ describe('App', () => {
     expect(request.request.method).toBe('POST');
     expect(request.request.body).toMatchObject({ name: 'Gym', amount: 450, dueDay: 19 });
     request.flush({ id: 'gym', name: 'Gym', amount: 450, frequency: 'monthly', isFixed: true, isActive: true });
+  });
+
+  it('should render real debt and saving tabs with loaded data', () => {
+    const fixture = TestBed.createComponent(MoneyPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('http://localhost:3000/api/money/categories').flush([]);
+    http.expectOne('http://localhost:3000/api/money/expenses').flush([]);
+    http.expectOne('http://localhost:3000/api/budgets/current').flush({ current: null, limits: [], summary: null });
+    http.expectOne('http://localhost:3000/api/debts').flush([{ id: 'debt-1', name: 'Tarjeta', initialAmount: 1000, currentAmount: 600, minimumPayment: 100, status: 'active' }]);
+    http.expectOne('http://localhost:3000/api/savings/goals').flush([{ id: 'goal-1', name: 'Viaje', currentAmount: 300, targetAmount: 1000, status: 'active' }]);
+    http.expectOne('http://localhost:3000/api/settings').flush({});
+    http.expectOne('http://localhost:3000/api/income/sources').flush([]);
+    http.expectOne('http://localhost:3000/api/recurring-payments').flush([]);
+
+    fixture.componentInstance['activeTab'].set('debt');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Tarjeta');
+
+    fixture.componentInstance['activeTab'].set('saving');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Viaje');
   });
 
   it('should format currency without MX prefix', () => {

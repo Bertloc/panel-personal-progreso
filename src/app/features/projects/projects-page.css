@@ -1,13 +1,15 @@
 .page-header { display: grid; }
-.page-header .primary { margin-top: 16px; justify-self: start; }
+.page-header .primary { width: 100%; margin-top: 20px; }
 .summary-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.summary { display: grid; gap: 6px; padding: 16px; }
+.summary { display: grid; gap: 10px; min-height: 94px; padding: 16px; }
 .summary span, .meta-row, .progress-copy, .budget span { color: var(--color-text-secondary); font-size: .82rem; }
-.summary strong { font-size: 1.8rem; }
-.featured { display: grid; gap: 14px; background: radial-gradient(circle at top right, rgb(124 109 255 / .22), transparent 38%), linear-gradient(180deg, #1b1b58, #171a23); }
+.summary strong { color: var(--color-green); font-size: 1.8rem; }
+.summary:nth-child(2) strong { color: var(--color-text); }
+.summary:nth-child(3) strong { color: var(--color-orange); }
+.featured { display: grid; gap: 14px; border-color: rgb(110 112 247 / .38); background: radial-gradient(circle at top right, rgb(110 112 247 / .18), transparent 38%), var(--color-card); }
 .featured h2 { margin: 0; font-size: 1.8rem; }
 .section-stack { display: grid; gap: 12px; }
-.section-title { margin: 8px 0 0; color: var(--color-text-secondary); font-size: 1rem; letter-spacing: .08em; text-transform: uppercase; }
+.section-title { margin: 8px 0 0; font-size: 1.15rem; }
 .project-card { display: grid; gap: 13px; }
 .meta-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .progress-copy { margin-top: 3px; }
@@ -22,4 +24,6 @@ button.danger { background: rgb(255 77 109 / .14); color: var(--color-red); }
 .state.error, .warning { color: var(--color-red); }
 .warning { margin: 0; padding: 12px; border-radius: 14px; background: rgb(255 77 109 / .1); }
 .card-label, .card-meta { margin: 0; }
-@media (max-width: 380px) { .actions { grid-template-columns: 1fr; } }
+.budget { display: grid; gap: 10px; }
+.budget > .split-line > span { color: var(--color-green); font-weight: 700; }
+@media (max-width: 380px) { .actions { gap: 6px; } }

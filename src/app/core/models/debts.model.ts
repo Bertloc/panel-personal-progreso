@@ -11,6 +11,7 @@ export interface DebtApi {
   strategy?: DebtStrategy; priority?: DebtPriority; notes?: string | null; nextPaymentDate?: string | null;
   progressPercent?: number; paidAmount?: number; progress?: string | number; suggestedExtraPayment?: string | number;
   bankPlan?: string; aggressivePlan?: string; status?: DebtStatus | string;
+  apr?: string | number | null; interestRate?: string | number | null;
 }
 export interface DebtPaymentApi { id: string; debtId?: string; amount: string | number; paymentDate?: string; type?: DebtPaymentType; note?: string | null; date?: string; createdAt?: string; }
 export interface DebtProjectionApi { payoffDate?: string; totalInterest?: string | number; [key: string]: unknown; }

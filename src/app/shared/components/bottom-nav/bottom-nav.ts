@@ -27,11 +27,10 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
       display: grid;
       grid-template-columns: repeat(5, 1fr);
       width: min(100%, 460px);
-      padding: 10px 8px max(10px, env(safe-area-inset-bottom));
+      padding: 9px 8px max(10px, env(safe-area-inset-bottom));
       transform: translateX(-50%);
-      border: 1px solid var(--color-border);
-      border-bottom: 0;
-      background: rgb(9 11 16 / 96%);
+      border-top: 1px solid var(--color-border);
+      background: rgb(9 11 15 / 97%);
       backdrop-filter: blur(16px);
     }
 
@@ -45,6 +44,11 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
     }
 
     a span {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 30px;
+      border-radius: 999px;
       font-size: 1.1rem;
       filter: grayscale(1);
     }
@@ -55,6 +59,7 @@ import { RouterLink, RouterLinkActive } from '@angular/router';
 
     a.active span {
       filter: none;
+      background: rgb(40 215 154 / 16%);
     }
   `,
 })

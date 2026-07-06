@@ -14,7 +14,7 @@ import { RoutinesApiService } from '../../core/services/routines-api.service';
       <header class="page-header">
         <p class="page-eyebrow">Tu día</p>
         <h1 class="page-title">Rutina</h1>
-        <p class="page-copy">Marca lo que haces hoy y guarda tu historial.</p>
+        <p class="page-copy">Construye constancia marcando tus hábitos de hoy.</p>
       </header>
 
       <a class="setup-link" routerLink="/routine/setup">Configurar rutina</a>
@@ -26,15 +26,10 @@ import { RoutinesApiService } from '../../core/services/routines-api.service';
       } @else if (today(); as routine) {
         @if (routine.items.length) {
           <section class="surface-card routine-hero">
-            <div class="routine-ring" [style.--progress]="routine.summary.completionPercent" aria-hidden="true">
-              <strong>{{ routine.summary.completionPercent }}%</strong>
-            </div>
-            <div>
-              <h2 class="section-card-title">Cumplimiento de hoy</h2>
-              <p class="section-card-copy">{{ routine.summary.done }}/{{ routine.summary.total }} completadas</p>
-              <p class="pending-copy">{{ routine.summary.pending }} pendientes</p>
-              @if (summary(); as totals) { <p class="streak-copy">Racha: {{ totals.streak.current }} días</p> }
-            </div>
+            <div class="split-line"><p class="card-label">Progreso de hoy</p>@if (summary(); as totals) { <span class="streak-badge">♨ Racha {{ totals.streak.current }} días</span> }</div>
+            <strong class="routine-percent">{{ routine.summary.completionPercent }}%</strong>
+            <p class="section-card-copy">{{ routine.summary.done }} de {{ routine.summary.total }} hábitos completados</p>
+            <div class="progress-track"><span class="progress-fill progress-fill--green" [style.width.%]="routine.summary.completionPercent"></span></div>
           </section>
 
           <section class="surface-card activities">
@@ -45,10 +40,10 @@ import { RoutinesApiService } from '../../core/services/routines-api.service';
                   <button class="routine-toggle" type="button" [class.done]="item.status === 'done'" [disabled]="savingId() === item.itemId" [attr.aria-pressed]="item.status === 'done'" [attr.aria-label]="(item.status === 'done' ? 'Desmarcar ' : 'Completar ') + item.title" (click)="toggle(item)">{{ item.status === 'done' ? '✓' : '' }}</button>
                   <div class="routine-copy">
                     <strong [class.completed]="item.status === 'done'">{{ item.title }}</strong>
-                    <p>{{ item.routineName }} · {{ priorityLabel(item.priority) }}</p>
+                    <p>{{ priorityLabel(item.priority) }}</p>
                   </div>
                   <div class="row-actions">
-                    <span class="status-badge" [class.status-badge--green]="item.status === 'done'" [class.status-badge--orange]="item.status === 'pending'">{{ statusLabel(item.status) }}</span>
+                    <span class="status-badge" [class.status-badge--green]="item.status === 'done'">{{ item.routineName }}</span>
                     @if (item.status === 'pending') { <button class="skip" type="button" [disabled]="savingId() === item.itemId" (click)="setStatus(item, 'skipped')">Omitir</button> }
                   </div>
                 </article>
@@ -70,15 +65,14 @@ import { RoutinesApiService } from '../../core/services/routines-api.service';
     </div>
   `,
   styles: `
-    .setup-link { display: inline-flex; width: fit-content; padding: 10px 14px; border-radius: 12px; background: var(--color-purple); color: white; text-decoration: none; font-weight: 750; }
-    .routine-hero { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 18px; background: radial-gradient(circle at top right, rgb(74 222 128 / .18), transparent 44%), linear-gradient(180deg, rgb(17 39 24 / .96), rgb(18 21 29)); border-color: rgb(74 222 128 / .18); }
-    .routine-ring { --progress: 0; display: grid; place-items: center; width: 104px; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at center, #13201a 59%, transparent 60%), conic-gradient(var(--color-green) calc(var(--progress) * 1%), #29243b 0); }
-    .routine-ring strong { font-size: 1.8rem; letter-spacing: -.06em; }
-    .pending-copy, .streak-copy { margin: 8px 0 0; color: var(--color-text-secondary); }
-    .streak-copy { color: var(--color-orange); font-weight: 700; }
-    .activities { padding-block: 18px; }
-    .routine-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 14px 0; border-bottom: 1px solid rgb(255 255 255 / .06); }
-    .routine-row:last-child { border-bottom: 0; }
+    .setup-link { justify-self: end; margin-top: -8px; color: var(--color-text-secondary); text-decoration: none; font-size: .82rem; }
+    .routine-hero { display: grid; gap: 10px; background: radial-gradient(circle at top right, rgb(40 215 154 / .14), transparent 44%), var(--color-card); border-color: rgb(40 215 154 / .26); }
+    .routine-percent { color: var(--color-green); font-size: 3.35rem; line-height: .95; letter-spacing: -.07em; }
+    .streak-badge { padding: 6px 10px; border-radius: 999px; background: rgb(255 159 67 / .15); color: var(--color-orange); font-size: .72rem; font-weight: 750; }
+    .activities { padding: 0; border: 0; background: transparent; box-shadow: none; }
+    .activities .card-head { padding-inline: 2px; }
+    .list-card { gap: 12px; }
+    .routine-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 18px 16px; border: 1px solid var(--color-border); border-radius: 22px; background: var(--color-card); }
     .routine-toggle { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid #384051; border-radius: 50%; background: transparent; color: #04120a; cursor: pointer; font-weight: 900; }
     .routine-toggle.done { border-color: var(--color-green); background: var(--color-green); }
     .routine-toggle:disabled, .skip:disabled { opacity: .5; }
@@ -90,7 +84,7 @@ import { RoutinesApiService } from '../../core/services/routines-api.service';
     .weekly-card, .empty-card { display: grid; gap: 12px; }
     .empty, .error { margin: 0; padding: 14px; border-radius: 14px; color: var(--color-text-secondary); background: rgb(255 255 255 / .04); }
     .error { color: var(--color-red); background: rgb(255 77 109 / .12); }
-    @media (max-width: 380px) { .routine-hero { grid-template-columns: 1fr; } .routine-row { grid-template-columns: auto 1fr; } .row-actions { grid-column: 2; grid-template-columns: auto auto; align-items: center; } }
+    @media (max-width: 380px) { .routine-row { grid-template-columns: auto 1fr; } .row-actions { grid-column: 2; grid-template-columns: auto auto; align-items: center; justify-items: start; } }
   `,
 })
 export class HabitsPage {

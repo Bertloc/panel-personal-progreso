@@ -33,7 +33,7 @@ import { ProjectFormModal } from './project-form-modal';
         </section>
 
         @if (summary()?.budget; as budget) {
-          <section class="surface-card budget"><div class="split-line"><div><p class="card-label">Presupuesto de proyectos</p><strong>{{ budget.spent | appCurrency }} gastado</strong></div><span>{{ budget.remaining | appCurrency }} disponible</span></div><p class="card-meta">Planeado: {{ budget.planned | appCurrency }}</p></section>
+          <section class="surface-card budget"><div class="split-line"><div><p class="card-label">Presupuesto de proyectos</p><strong>{{ budget.spent | appCurrency }} gastado</strong></div><span>{{ budget.remaining | appCurrency }} disponible</span></div><p class="card-meta">Planeado: {{ budget.planned | appCurrency }}</p><div class="progress-track"><span class="progress-fill progress-fill--purple" [style.width.%]="budget.planned ? (budget.spent / budget.planned) * 100 : 0"></span></div></section>
         }
 
         @if (featured(); as project) {
@@ -66,7 +66,7 @@ import { ProjectFormModal } from './project-form-modal';
         }
 
         @if (upcomingTasks().length) {
-          <section class="surface-card section-stack"><h2 class="section-card-title">Tareas próximas</h2>
+          <section class="surface-card section-stack"><h2 class="section-card-title">☷ &nbsp;Tareas próximas</h2>
             @for (task of upcomingTasks(); track task.id) { <article class="task"><div><strong>{{ task.title }}</strong><p class="card-meta">Proyecto: {{ task.projectName || projectName(task.projectId) }}</p></div><div class="meta-row"><span [class]="priorityClass(task.priority)">{{ priorityLabel(task.priority) }}</span><span>{{ task.dueDate ? formatDate(task.dueDate) : 'Sin fecha' }}</span><span>{{ taskStatusLabel(task.status) }}</span></div></article> }
           </section>
         }

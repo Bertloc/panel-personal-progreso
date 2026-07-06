@@ -34,22 +34,23 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
         <section class="surface-card loading-state" role="status">Cargando tu resumen…</section>
       } @else if (financialReady) {
         <section class="surface-card hero-card">
-          <p class="card-label">Disponible hoy</p>
+          <div class="split-line"><p class="card-label">Disponible hoy</p><span class="reset-badge">se reinicia en {{ homeSummary.resetHours }} h</span></div>
           <strong class="hero-amount">{{ homeSummary.availableToday | appCurrency }}</strong>
-          <p class="hero-note">MXN · se reinicia en {{ homeSummary.resetHours }} h</p>
+          <p class="hero-note">MXN</p>
           <div class="hero-meta">
-            <strong>{{ homeSummary.weeklySpent | appCurrency }} gastado</strong>
-            <p class="meta-accent">{{ homeSummary.weeklyRemaining | appCurrency }} restantes de {{ homeSummary.weeklyLimit | appCurrency }}</p>
+            <strong>{{ homeSummary.monthlySpent | appCurrency }} gastado</strong>
+            <strong class="meta-accent">{{ monthlyRemaining | appCurrency }} restantes</strong>
           </div>
           <div class="progress-track progress-track--large" aria-hidden="true">
-            <span class="progress-fill progress-fill--green" [style.width.%]="getProgressPercent(homeSummary.weeklySpent, homeSummary.weeklyLimit)"></span>
+            <span class="progress-fill progress-fill--green" [style.width.%]="getProgressPercent(homeSummary.monthlySpent, homeSummary.monthlyLimit)"></span>
           </div>
+          <p class="budget-copy">de {{ homeSummary.monthlyLimit | appCurrency }} de presupuesto mensual</p>
         </section>
 
         <section class="mini-grid mini-grid--3">
-          <article class="surface-card compact-card"><p class="card-label">Gastado este mes</p><strong>{{ homeSummary.monthlySpent | appCurrency }}</strong><p class="card-meta">de presupuesto mensual: {{ homeSummary.monthlyLimit | appCurrency }}</p></article>
-          <article class="surface-card compact-card"><p class="card-label">Ahorro en metas</p><strong class="value-green">{{ homeSummary.saved | appCurrency }}</strong><p class="card-meta">{{ homeSummary.savingsLabel }}</p></article>
-          <article class="surface-card compact-card"><p class="card-label">Deuda</p><strong>{{ homeSummary.debtLeft | appCurrency }}</strong><p class="card-meta">{{ homeSummary.debtLabel }}</p></article>
+          <article class="surface-card compact-card"><i class="metric-icon metric-icon--orange">↘</i><p class="card-label">Gastado</p><strong>{{ homeSummary.monthlySpent | appCurrency }}</strong><p class="card-meta">este mes</p></article>
+          <article class="surface-card compact-card"><i class="metric-icon metric-icon--green">◇</i><p class="card-label">Ahorro</p><strong>{{ homeSummary.saved | appCurrency }}</strong><p class="card-meta">en metas</p></article>
+          <article class="surface-card compact-card"><i class="metric-icon metric-icon--red">▭</i><p class="card-label">Deuda</p><strong>{{ homeSummary.debtLeft | appCurrency }}</strong><p class="card-meta">{{ homeSummary.debtLabel }}</p></article>
         </section>
       } @else if (!apiError()) {
         <section class="surface-card setup-card">
@@ -64,7 +65,7 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
       } @else if (routineSummary(); as routine) {
         @if (routine.today.total) {
           <section class="surface-card routine-card">
-            <div class="card-head"><h2 class="section-card-title">Rutina de hoy</h2><a class="card-link" routerLink="/routine">Ver rutina</a></div>
+            <div class="card-head"><h2 class="section-card-title">Rutina de hoy</h2><a class="card-link" routerLink="/routine">Ver rutina ↗</a></div>
             <strong>{{ routine.today.done }}/{{ routine.today.total }} completadas · {{ routine.today.completionPercent }}%</strong>
             <p class="card-meta">Racha: {{ routine.streak.current }} días</p>
             <div class="progress-track"><span class="progress-fill progress-fill--green" [style.width.%]="routine.today.completionPercent"></span></div>
@@ -79,7 +80,7 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
       } @else if (projectSummary(); as projects) {
         @if (projects.highestProgressProject; as project) {
           <section class="surface-card routine-card">
-            <div class="card-head"><h2 class="section-card-title">Proyecto principal</h2><a class="card-link" [routerLink]="['/projects', project.id]">Ver proyecto</a></div>
+            <div class="card-head"><h2 class="section-card-title">Proyecto principal</h2><a class="card-link" [routerLink]="['/projects', project.id]">Ver proyecto ↗</a></div>
             <strong>{{ project.name }} · {{ project.progressPercent ?? 0 }}%</strong>
             <p class="card-meta">Próxima tarea: {{ project.nextTask?.title || 'Sin tareas próximas' }}</p>
             <div class="progress-track"><span class="progress-fill progress-fill--purple" [style.width.%]="project.progressPercent ?? 0"></span></div>
@@ -102,13 +103,17 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
     </div>
   `,
   styles: `
-    .hero-card { padding: 22px; background: radial-gradient(circle at top right, rgb(74 222 128 / .2), transparent 42%), linear-gradient(180deg, rgb(18 36 24 / .96), rgb(18 21 29)); border-color: rgb(74 222 128 / .22); }
+    .hero-card { padding: 22px; background: radial-gradient(circle at top right, rgb(40 215 154 / .14), transparent 42%), var(--color-card); border-color: rgb(40 215 154 / .28); }
     .card-label, .hero-note, .card-meta { margin: 0; color: var(--color-text-secondary); }
     .hero-amount { display: block; margin-top: 8px; font-size: clamp(3.1rem, 14vw, 4.5rem); line-height: .92; letter-spacing: -.08em; color: var(--color-green); }
-    .hero-meta { display: grid; gap: 4px; margin: 22px 0 14px; }
+    .hero-meta { display: flex; justify-content: space-between; gap: 12px; margin: 22px 0 10px; }
     .meta-accent, .accent-copy { margin: 0; color: var(--color-green); }
+    .reset-badge { padding: 5px 10px; border-radius: 999px; background: rgb(40 215 154 / .14); color: var(--color-green); font-size: .72rem; font-weight: 750; }
+    .budget-copy { margin: 9px 0 0; color: var(--color-text-secondary); font-size: .82rem; }
     .compact-card { min-width: 0; padding: 16px; }
-    .compact-card strong { display: block; margin: 6px 0 4px; font-size: 1.15rem; }
+    .compact-card strong { display: block; margin: 4px 0 2px; font-size: 1.2rem; }
+    .metric-icon { display: grid; place-items: center; width: 28px; height: 28px; margin-bottom: 12px; border-radius: 10px; background: #23252b; color: var(--color-text-secondary); font-style: normal; }
+    .metric-icon--orange { color: var(--color-orange); } .metric-icon--green { color: var(--color-green); } .metric-icon--red { color: var(--color-red); }
     .value-green { color: var(--color-green); }
     .setup-card { display: grid; gap: 12px; background: linear-gradient(180deg, rgb(35 29 65 / .7), var(--color-card)); }
     .routine-card { display: grid; gap: 12px; }
@@ -172,6 +177,7 @@ export class HomePage {
   get homeSummary() { return this.summary(); }
   protected get profileName() { return this.onboarding.status()?.profile?.displayName ?? ''; }
   protected get financialReady() { return this.homeSummary.weeklyLimit > 0 || this.homeSummary.monthlyLimit > 0; }
+  protected get monthlyRemaining() { return Math.max(0, this.homeSummary.monthlyLimit - this.homeSummary.monthlySpent); }
   protected getProgressPercent(used: number, limit: number) { return limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0; }
   protected getHeatmapClass(value: HomeSummary['heatmap'][number]['value']) { return `heatmap-cell heatmap-cell--${value}`; }
 }
