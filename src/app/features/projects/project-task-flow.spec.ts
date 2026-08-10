@@ -90,6 +90,75 @@ describe('Project task flow', () => {
 
     expect((fixture.nativeElement.querySelector('.task select') as HTMLSelectElement).value).toBe('completed');
     expect(fixture.nativeElement.querySelector('.task-meta').textContent).toContain('Completada');
+    openTaskEditor(fixture);
+    expect(fixture.nativeElement.querySelector('app-project-task-form-modal')).not.toBeNull();
+  });
+
+  it('opens a fresh task modal after ten consecutive saves', () => {
+    const fixture = createDetail();
+    const savedTasks: ProjectTask[] = [task('pending')];
+
+    for (let index = 1; index <= 10; index++) {
+      openTaskEditor(fixture);
+      const input = fixture.nativeElement.querySelector('app-project-task-form-modal input[formControlName="title"]') as HTMLInputElement;
+      input.value = `Tarea ${index}`;
+      input.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+      (fixture.nativeElement.querySelector('app-project-task-form-modal button[type="submit"]') as HTMLButtonElement).click();
+
+      const savedTask = { ...task('pending'), id: `task-${index + 1}`, title: input.value };
+      savedTasks.push(savedTask);
+      http.expectOne(`${API_BASE_URL}/projects/${project.id}/tasks`).flush(savedTask);
+      http.expectOne(`${API_BASE_URL}/projects/${project.id}`).flush(project);
+      http.expectOne(`${API_BASE_URL}/projects/${project.id}/tasks`).flush(savedTasks);
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('app-project-task-form-modal')).toBeNull();
+      expect(fixture.nativeElement.querySelector('app-action-modal .backdrop')).toBeNull();
+      expect(fixture.componentInstance['taskEditor']()).toBeNull();
+    }
+
+    openTaskEditor(fixture);
+    expect(fixture.nativeElement.querySelector('app-project-task-form-modal')).not.toBeNull();
+  });
+
+  it('opens again after repeated cancels, editing and deleting', () => {
+    const fixture = createDetail();
+
+    for (let index = 0; index < 10; index++) {
+      openTaskEditor(fixture);
+      findButton(fixture, 'Cancelar').click();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('app-action-modal')).toBeNull();
+    }
+
+    findButton(fixture, 'Editar').click();
+    fixture.detectChanges();
+    const input = fixture.nativeElement.querySelector('app-project-task-form-modal input[formControlName="title"]') as HTMLInputElement;
+    input.value = 'Tarea editada';
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    findButton(fixture, 'Guardar').click();
+    const edited = { ...task('pending'), title: input.value };
+    http.expectOne(`${API_BASE_URL}/projects/tasks/task-1`).flush(edited);
+    http.expectOne(`${API_BASE_URL}/projects/${project.id}`).flush(project);
+    http.expectOne(`${API_BASE_URL}/projects/${project.id}/tasks`).flush([edited]);
+    fixture.detectChanges();
+
+    const originalConfirm = window.confirm;
+    window.confirm = () => true;
+    try {
+      findButton(fixture, 'Eliminar').click();
+      http.expectOne(`${API_BASE_URL}/projects/tasks/task-1`).flush(null);
+      http.expectOne(`${API_BASE_URL}/projects/${project.id}`).flush(project);
+      http.expectOne(`${API_BASE_URL}/projects/${project.id}/tasks`).flush([]);
+      fixture.detectChanges();
+    } finally {
+      window.confirm = originalConfirm;
+    }
+
+    openTaskEditor(fixture);
+    expect(fixture.nativeElement.querySelector('app-project-task-form-modal')).not.toBeNull();
   });
 
   function createDetail(status: ProjectTask['status'] = 'pending'): ComponentFixture<ProjectDetailPage> {
@@ -101,12 +170,15 @@ describe('Project task flow', () => {
   }
 
   function openTaskEditor(fixture: ComponentFixture<ProjectDetailPage>): void {
-    const button = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button')).find(({ textContent }) => textContent?.includes('Agregar tarea'))!;
-    button.click();
+    findButton(fixture, 'Agregar tarea').click();
     fixture.detectChanges();
   }
 });
 
 function labels(fixture: ComponentFixture<ProjectTaskFormModal>): string[] {
   return Array.from<HTMLLabelElement>(fixture.nativeElement.querySelectorAll('label')).map(({ textContent }) => textContent?.trim() ?? '');
+}
+
+function findButton(fixture: ComponentFixture<ProjectDetailPage>, text: string): HTMLButtonElement {
+  return Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button')).find(({ textContent }) => textContent?.includes(text))!;
 }

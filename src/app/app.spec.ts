@@ -25,12 +25,14 @@ import { firstValueFrom, of } from 'rxjs';
 import { OnboardingStateService } from './core/services/onboarding-state.service';
 import { priorityToClass, priorityToColor } from './core/utils/priority-color.util';
 import { MoneyPage } from './features/money/money-page';
+import { API_BASE_URL } from './core/config/api.config';
 
 let accessToken: string | null = null;
 const authStub = {
   currentUser: signal(null), loading: signal(false), isAuthenticated: signal(true),
   getAccessToken: () => Promise.resolve(accessToken), logout: () => Promise.resolve(), whenReady: () => Promise.resolve(),
 };
+const apiUrl = (path = '') => `${API_BASE_URL}${path}`;
 
 describe('App', () => {
   beforeEach(async () => {
@@ -70,12 +72,12 @@ describe('App', () => {
     fixture.componentRef.setInput('action', 'expense');
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne('http://localhost:3000/api/money/categories').flush({ data: [{ id: 'food', name: 'Comida', type: 'expense' }] });
+    http.expectOne(apiUrl('/money/categories')).flush({ data: [{ id: 'food', name: 'Comida', type: 'expense' }] });
     fixture.componentInstance.form.patchValue({ categoryId: 'food', amount: 95, date: '2026-06-29', note: 'Prueba desde UI', paymentMethod: 'cash' });
 
     fixture.componentInstance.save();
 
-    const request = http.expectOne('http://localhost:3000/api/money/expenses');
+    const request = http.expectOne(apiUrl('/money/expenses'));
     expect(request.request.method).toBe('POST');
     expect(request.request.body).toEqual({ categoryId: 'food', amount: 95, expenseDate: '2026-06-29', note: 'Prueba desde UI', source: 'manual', paymentMethod: 'cash' });
     request.flush({ id: 'expense-1', amount: 95 });
@@ -86,12 +88,12 @@ describe('App', () => {
     fixture.componentRef.setInput('action', 'income');
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne('http://localhost:3000/api/income/sources').flush([]);
+    http.expectOne(apiUrl('/income/sources')).flush([]);
     fixture.componentInstance.form.patchValue({ amount: 4730, date: '2026-07-15', type: 'regular', note: 'Quincena' });
 
     fixture.componentInstance.save();
 
-    const request = http.expectOne('http://localhost:3000/api/income/events');
+    const request = http.expectOne(apiUrl('/income/events'));
     expect(request.request.method).toBe('POST');
     expect(request.request.body).toEqual({ sourceId: undefined, amount: 4730, incomeDate: '2026-07-15', type: 'regular', note: 'Quincena' });
     request.flush({ id: 'income-1', amount: 4730, incomeDate: '2026-07-15', type: 'regular' });
@@ -102,20 +104,20 @@ describe('App', () => {
     const debtFixture = TestBed.createComponent(QuickCreate);
     debtFixture.componentRef.setInput('action', 'debt-payment');
     debtFixture.detectChanges();
-    http.expectOne('http://localhost:3000/api/debts').flush([{ id: 'debt-1', name: 'Banco', status: 'active' }]);
+    http.expectOne(apiUrl('/debts')).flush([{ id: 'debt-1', name: 'Banco', status: 'active' }]);
     debtFixture.componentInstance.form.patchValue({ targetId: 'debt-1', amount: 500, date: '2026-07-15', type: 'extra' });
     debtFixture.componentInstance.save();
-    const debtRequest = http.expectOne('http://localhost:3000/api/debts/debt-1/payments');
+    const debtRequest = http.expectOne(apiUrl('/debts/debt-1/payments'));
     expect(debtRequest.request.body).toMatchObject({ amount: 500, paymentDate: '2026-07-15', type: 'extra' });
     debtRequest.flush({ id: 'payment-1', debtId: 'debt-1', amount: 500 });
 
     const savingFixture = TestBed.createComponent(QuickCreate);
     savingFixture.componentRef.setInput('action', 'saving');
     savingFixture.detectChanges();
-    http.expectOne('http://localhost:3000/api/savings/goals').flush([{ id: 'goal-1', name: 'Laptop', status: 'active' }]);
+    http.expectOne(apiUrl('/savings/goals')).flush([{ id: 'goal-1', name: 'Laptop', status: 'active' }]);
     savingFixture.componentInstance.form.patchValue({ targetId: 'goal-1', amount: 300, date: '2026-07-15', type: 'deposit' });
     savingFixture.componentInstance.save();
-    const savingRequest = http.expectOne('http://localhost:3000/api/savings/goals/goal-1/movements');
+    const savingRequest = http.expectOne(apiUrl('/savings/goals/goal-1/movements'));
     expect(savingRequest.request.body).toMatchObject({ amount: 300, movementDate: '2026-07-15', type: 'deposit' });
     savingRequest.flush({ id: 'movement-1', goalId: 'goal-1', amount: 300 });
   });
@@ -123,12 +125,12 @@ describe('App', () => {
   it('should refresh Home when money changes', () => {
     TestBed.createComponent(HomePage);
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne('http://localhost:3000/api/dashboard/summary').flush({ budgetRemaining: 700 });
-    http.expectOne('http://localhost:3000/api/routines/summary').flush({ today: { total: 0, done: 0, pending: 0, completionPercent: 0 }, week: { activeDays: 0, completedDays: 0, completionPercent: 0 }, streak: { current: 0, best: 0 } });
+    http.expectOne(apiUrl('/dashboard/summary')).flush({ budgetRemaining: 700 });
+    http.expectOne(apiUrl('/routines/summary')).flush({ today: { total: 0, done: 0, pending: 0, completionPercent: 0 }, week: { activeDays: 0, completedDays: 0, completionPercent: 0 }, streak: { current: 0, best: 0 } });
 
     TestBed.inject(QuickCreateEventsService).notifyMoneyChanged('income');
 
-    http.expectOne('http://localhost:3000/api/dashboard/summary').flush({ budgetRemaining: 700, availableToday: 4730 });
+    http.expectOne(apiUrl('/dashboard/summary')).flush({ budgetRemaining: 700, availableToday: 4730 });
   });
 
   it('should toggle a routine item and refresh today', () => {
@@ -137,17 +139,17 @@ describe('App', () => {
     const http = TestBed.inject(HttpTestingController);
     const pending = { routineId: 'routine-1', routineName: 'Entre semana', itemId: 'gym', title: 'Gym', priority: 'medium', isRequired: true, status: 'pending', logId: null };
     const summary = { today: { total: 1, done: 0, pending: 1, completionPercent: 0 }, week: { activeDays: 1, completedDays: 0, completionPercent: 0 }, streak: { current: 0, best: 0 } };
-    http.expectOne('http://localhost:3000/api/routines/today').flush({ date: '2026-06-30', dayOfWeek: 2, items: [pending], summary: { total: 1, done: 0, pending: 1, skipped: 0, missed: 0, completionPercent: 0 } });
-    http.expectOne('http://localhost:3000/api/routines/summary').flush(summary);
+    http.expectOne(apiUrl('/routines/today')).flush({ date: '2026-06-30', dayOfWeek: 2, items: [pending], summary: { total: 1, done: 0, pending: 1, skipped: 0, missed: 0, completionPercent: 0 } });
+    http.expectOne(apiUrl('/routines/summary')).flush(summary);
     fixture.detectChanges();
 
     fixture.nativeElement.querySelector('.routine-toggle').click();
 
-    const log = http.expectOne('http://localhost:3000/api/routines/logs');
+    const log = http.expectOne(apiUrl('/routines/logs'));
     expect(log.request.body).toMatchObject({ routineId: 'routine-1', routineItemId: 'gym', logDate: '2026-06-30', status: 'done' });
     log.flush({ id: 'log-1' });
-    http.expectOne('http://localhost:3000/api/routines/today').flush({ date: '2026-06-30', dayOfWeek: 2, items: [{ ...pending, status: 'done', logId: 'log-1' }], summary: { total: 1, done: 1, pending: 0, skipped: 0, missed: 0, completionPercent: 100 } });
-    http.expectOne('http://localhost:3000/api/routines/summary').flush({ ...summary, today: { total: 1, done: 1, pending: 0, completionPercent: 100 } });
+    http.expectOne(apiUrl('/routines/today')).flush({ date: '2026-06-30', dayOfWeek: 2, items: [{ ...pending, status: 'done', logId: 'log-1' }], summary: { total: 1, done: 1, pending: 0, skipped: 0, missed: 0, completionPercent: 100 } });
+    http.expectOne(apiUrl('/routines/summary')).flush({ ...summary, today: { total: 1, done: 1, pending: 0, completionPercent: 100 } });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.routine-toggle').classList.contains('done')).toBe(true);
   });
@@ -158,7 +160,7 @@ describe('App', () => {
     let days = 0;
     api.getHistory({ startDate: '2026-06-23', endDate: '2026-06-30' }).subscribe((history) => days = history.length);
 
-    http.expectOne((request) => request.url === 'http://localhost:3000/api/routines/history' && request.params.get('startDate') === '2026-06-23').flush({ startDate: '2026-06-23', endDate: '2026-06-30', days: [{ date: '2026-06-30', total: 3, done: 1, skipped: 0, missed: 0, completionPercent: 33 }] });
+    http.expectOne((request) => request.url === apiUrl('/routines/history') && request.params.get('startDate') === '2026-06-23').flush({ startDate: '2026-06-23', endDate: '2026-06-30', days: [{ date: '2026-06-30', total: 3, done: 1, skipped: 0, missed: 0, completionPercent: 33 }] });
     expect(days).toBe(1);
   });
 
@@ -166,28 +168,28 @@ describe('App', () => {
     const fixture = TestBed.createComponent(RoutineSetupPage);
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne('http://localhost:3000/api/routines').flush([]);
+    http.expectOne(apiUrl('/routines')).flush([]);
     fixture.componentInstance['routineForm'].patchValue({ name: 'Rutina entre semana', daysOfWeek: [1, 2, 3, 4, 5] });
     fixture.detectChanges();
     fixture.nativeElement.querySelector('form button[type="submit"]').click();
-    const routineRequest = http.expectOne('http://localhost:3000/api/routines');
+    const routineRequest = http.expectOne(apiUrl('/routines'));
     expect(routineRequest.request.body).toMatchObject({ name: 'Rutina entre semana', daysOfWeek: [1, 2, 3, 4, 5] });
     const routine = { id: 'routine-1', name: 'Rutina entre semana', status: 'active', priority: 'medium', itemsCount: 0 };
     routineRequest.flush(routine);
-    http.expectOne('http://localhost:3000/api/routines').flush([routine]);
+    http.expectOne(apiUrl('/routines')).flush([routine]);
     fixture.detectChanges();
 
     const activities = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button')).find((button) => button.textContent?.includes('Actividades'))!;
     activities.click();
-    http.expectOne('http://localhost:3000/api/routines/routine-1/items').flush([]);
+    http.expectOne(apiUrl('/routines/routine-1/items')).flush([]);
     fixture.componentInstance['itemForm'].patchValue({ title: 'Gym' });
     fixture.detectChanges();
     fixture.nativeElement.querySelectorAll('form')[1].querySelector('button[type="submit"]').click();
-    const itemRequest = http.expectOne('http://localhost:3000/api/routines/routine-1/items');
+    const itemRequest = http.expectOne(apiUrl('/routines/routine-1/items'));
     expect(itemRequest.request.body).toMatchObject({ title: 'Gym', isRequired: true });
     itemRequest.flush({ id: 'gym', routineId: 'routine-1', title: 'Gym', priority: 'medium', isRequired: true });
-    http.expectOne('http://localhost:3000/api/routines/routine-1/items').flush([]);
-    http.expectOne('http://localhost:3000/api/routines').flush([routine]);
+    http.expectOne(apiUrl('/routines/routine-1/items')).flush([]);
+    http.expectOne(apiUrl('/routines')).flush([routine]);
   });
 
   it('should prepare 84 valid heatmap days', () => {
@@ -225,7 +227,7 @@ describe('App', () => {
     }
     fixture.nativeElement.querySelector('.primary').click();
 
-    const request = http.expectOne('http://localhost:3000/api/onboarding/complete');
+    const request = http.expectOne(apiUrl('/onboarding/complete'));
     expect(request.request.method).toBe('POST');
     expect(request.request.body.income).toMatchObject({ amount: 4730, frequency: 'biweekly', nextPaymentDate: '2026-07-15' });
     request.flush({});
@@ -236,7 +238,7 @@ describe('App', () => {
     const http = TestBed.inject(HttpTestingController);
     api.createRecurringPayment({ name: 'Gym', amount: 450, frequency: 'monthly', dueDay: 19, isFixed: true }).subscribe();
 
-    const request = http.expectOne('http://localhost:3000/api/recurring-payments');
+    const request = http.expectOne(apiUrl('/recurring-payments'));
     expect(request.request.method).toBe('POST');
     expect(request.request.body).toMatchObject({ name: 'Gym', amount: 450, dueDay: 19 });
     request.flush({ id: 'gym', name: 'Gym', amount: 450, frequency: 'monthly', isFixed: true, isActive: true });
@@ -245,14 +247,14 @@ describe('App', () => {
   it('should render real debt and saving tabs with loaded data', () => {
     const fixture = TestBed.createComponent(MoneyPage);
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne('http://localhost:3000/api/money/categories').flush([]);
-    http.expectOne('http://localhost:3000/api/money/expenses').flush([]);
-    http.expectOne('http://localhost:3000/api/budgets/current').flush({ current: null, limits: [], summary: null });
-    http.expectOne('http://localhost:3000/api/debts').flush([{ id: 'debt-1', name: 'Tarjeta', initialAmount: 1000, currentAmount: 600, minimumPayment: 100, status: 'active' }]);
-    http.expectOne('http://localhost:3000/api/savings/goals').flush([{ id: 'goal-1', name: 'Viaje', currentAmount: 300, targetAmount: 1000, status: 'active' }]);
-    http.expectOne('http://localhost:3000/api/settings').flush({});
-    http.expectOne('http://localhost:3000/api/income/sources').flush([]);
-    http.expectOne('http://localhost:3000/api/recurring-payments').flush([]);
+    http.expectOne(apiUrl('/money/categories')).flush([]);
+    http.expectOne(apiUrl('/money/expenses')).flush([]);
+    http.expectOne(apiUrl('/budgets/current')).flush({ current: null, limits: [], summary: null });
+    http.expectOne(apiUrl('/debts')).flush([{ id: 'debt-1', name: 'Tarjeta', initialAmount: 1000, currentAmount: 600, minimumPayment: 100, status: 'active' }]);
+    http.expectOne(apiUrl('/savings/goals')).flush([{ id: 'goal-1', name: 'Viaje', currentAmount: 300, targetAmount: 1000, status: 'active' }]);
+    http.expectOne(apiUrl('/settings')).flush({});
+    http.expectOne(apiUrl('/income/sources')).flush([]);
+    http.expectOne(apiUrl('/recurring-payments')).flush([]);
 
     fixture.componentInstance['activeTab'].set('debt');
     fixture.detectChanges();
@@ -300,7 +302,7 @@ describe('App', () => {
     let result = { activeDays: 0, filter: '' };
     api.getHeatmap('routine', 2026).subscribe((response) => result = { activeDays: response.summary.activeDays, filter: response.filter });
 
-    http.expectOne((request) => request.url === 'http://localhost:3000/api/progress/heatmap' && request.params.get('filter') === 'habits' && request.params.get('year') === '2026').flush({
+    http.expectOne((request) => request.url === apiUrl('/progress/heatmap') && request.params.get('filter') === 'habits' && request.params.get('year') === '2026').flush({
       filter: 'habits', year: 2026, items: [{ progressDate: '2026-07-01T00:00:00.000Z', value: 75, level: 3, status: 'good' }],
       summary: { average: 75, activeDays: 1, excellentDays: 0, currentStreak: 1 },
     });
@@ -332,8 +334,8 @@ describe('App', () => {
   it('should keep a real empty projects response distinct from an API error', () => {
     const fixture = TestBed.createComponent(ProjectsPage);
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne('http://localhost:3000/api/projects').flush([]);
-    http.expectOne('http://localhost:3000/api/projects/summary').flush({ total: 0, active: 0, planned: 0, paused: 0, completed: 0, cancelled: 0, archived: 0, nearCompletion: 0, upcomingTasks: [] });
+    http.expectOne(apiUrl('/projects')).flush([]);
+    http.expectOne(apiUrl('/projects/summary')).flush({ total: 0, active: 0, planned: 0, paused: 0, completed: 0, cancelled: 0, archived: 0, nearCompletion: 0, upcomingTasks: [] });
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Aún no tienes proyectos.');
     expect(fixture.nativeElement.textContent).not.toContain('No pudimos cargar tus proyectos.');
@@ -343,7 +345,7 @@ describe('App', () => {
     const api = TestBed.inject(ProjectsApiService);
     const http = TestBed.inject(HttpTestingController);
     api.updateProjectTask('task-1', { status: 'completed' }).subscribe();
-    const request = http.expectOne('http://localhost:3000/api/projects/tasks/task-1');
+    const request = http.expectOne(apiUrl('/projects/tasks/task-1'));
     expect(request.request.method).toBe('PATCH');
     expect(request.request.body).toEqual({ status: 'completed' });
     request.flush({ id: 'task-1', projectId: 'project-1', title: 'Detalle', priority: 'high', status: 'completed' });
@@ -353,7 +355,7 @@ describe('App', () => {
     accessToken = 'access-token';
     let backendRequest: HttpRequest<unknown> | undefined;
     let externalRequest: HttpRequest<unknown> | undefined;
-    await firstValueFrom(TestBed.runInInjectionContext(() => authInterceptor(new HttpRequest('GET', 'http://localhost:3000/api/projects'), (request) => { backendRequest = request; return of(new HttpResponse()); })));
+    await firstValueFrom(TestBed.runInInjectionContext(() => authInterceptor(new HttpRequest('GET', apiUrl('/projects')), (request) => { backendRequest = request; return of(new HttpResponse()); })));
     await firstValueFrom(TestBed.runInInjectionContext(() => authInterceptor(new HttpRequest('GET', 'https://example.com'), (request) => { externalRequest = request; return of(new HttpResponse()); })));
     expect(backendRequest?.headers.get('Authorization')).toBe('Bearer access-token');
     expect(externalRequest?.headers.has('Authorization')).toBe(false);
@@ -363,9 +365,9 @@ describe('App', () => {
     const state = TestBed.inject(OnboardingStateService);
     const http = TestBed.inject(HttpTestingController);
     state.load('user-1').subscribe();
-    http.expectOne('http://localhost:3000/api/onboarding/status').flush({ completed: true, profile: null, settings: null, incomeSources: [] });
+    http.expectOne(apiUrl('/onboarding/status')).flush({ completed: true, profile: null, settings: null, incomeSources: [] });
     state.load('user-2').subscribe();
-    http.expectOne('http://localhost:3000/api/onboarding/status').flush({ completed: false, profile: null, settings: null, incomeSources: [] });
+    http.expectOne(apiUrl('/onboarding/status')).flush({ completed: false, profile: null, settings: null, incomeSources: [] });
     expect(state.status()?.completed).toBe(false);
   });
 });

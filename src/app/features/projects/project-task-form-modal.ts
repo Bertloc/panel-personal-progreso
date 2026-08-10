@@ -4,7 +4,6 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { ProjectTask, ProjectTaskPriority, ProjectTaskStatus } from '../../core/models/projects.model';
 import { ProjectsApiService } from '../../core/services/projects-api.service';
-import { QuickCreateEventsService } from '../../core/services/quick-create-events.service';
 import { ActionModal } from '../../shared/components/action-modal/action-modal';
 
 @Component({
@@ -40,7 +39,6 @@ export class ProjectTaskFormModal {
   readonly saved = output<ProjectTask>();
   private readonly fb = inject(FormBuilder);
   private readonly api = inject(ProjectsApiService);
-  private readonly events = inject(QuickCreateEventsService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly saving = signal(false);
   protected readonly error = signal('');
@@ -63,7 +61,7 @@ export class ProjectTaskFormModal {
     const request = task ? this.api.updateProjectTask(task.id, payload) : this.api.createProjectTask(this.projectId(), payload);
     this.saving.set(true); this.error.set('');
     request.pipe(finalize(() => this.saving.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: (savedTask) => { this.saved.emit(savedTask); this.events.notifyProjectChanged(); },
+      next: (savedTask) => this.saved.emit(savedTask),
       error: () => this.error.set('No se pudo guardar la tarea. Intenta de nuevo.'),
     });
   }

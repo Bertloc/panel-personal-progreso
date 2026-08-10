@@ -55,7 +55,7 @@ import { ProjectTaskFormModal } from './project-task-form-modal';
     </div>
 
     @if (editProject() && project(); as current) { <app-project-form-modal [project]="current" (close)="editProject.set(false)" (saved)="editProject.set(false)" /> }
-    @if (taskEditor() && project(); as current) { <app-project-task-form-modal [projectId]="current.id" [task]="editingTask()" (close)="closeTask()" (saved)="closeTask()" /> }
+    @if (taskEditor(); as editor) { @if (project(); as current) { <app-project-task-form-modal [projectId]="current.id" [task]="editor.task" (close)="closeTask()" (saved)="taskSaved($event)" /> } }
   `,
   styleUrl: './project-detail-page.css',
 })
@@ -71,8 +71,7 @@ export class ProjectDetailPage {
   protected readonly saving = signal(false);
   protected readonly error = signal(false);
   protected readonly editProject = signal(false);
-  protected readonly taskEditor = signal(false);
-  protected readonly editingTask = signal<ProjectTask | null>(null);
+  protected readonly taskEditor = signal<{ task: ProjectTask | null } | null>(null);
   private loadVersion = 0;
   protected readonly completedTasks = computed(() => this.tasks().filter(({ status }) => status === 'completed').length);
   protected readonly progress = computed(() => this.tasks().length ? Math.round((this.completedTasks() / this.tasks().length) * 100) : Math.max(0, Math.min(100, Math.round(Number(this.project()?.progressPercent) || 0))));
@@ -90,8 +89,13 @@ export class ProjectDetailPage {
       error: () => { if (version === this.loadVersion && !this.project()) { this.tasks.set([]); this.error.set(true); } },
     });
   }
-  protected openTask(task: ProjectTask | null = null): void { this.editingTask.set(task); this.taskEditor.set(true); }
-  protected closeTask(): void { this.taskEditor.set(false); this.editingTask.set(null); }
+  protected openTask(task: ProjectTask | null = null): void { this.taskEditor.set({ task }); }
+  protected closeTask(): void { this.taskEditor.set(null); }
+  protected taskSaved(savedTask: ProjectTask): void {
+    this.closeTask();
+    this.tasks.update((tasks) => tasks.some(({ id }) => id === savedTask.id) ? tasks.map((task) => task.id === savedTask.id ? savedTask : task) : [...tasks, savedTask]);
+    this.events.notifyProjectChanged();
+  }
   protected changeProjectStatus(status: ProjectStatus): void { this.run(this.api.updateProject(this.id, { status })); }
   protected changeTaskStatus(task: ProjectTask, status: ProjectTaskStatus): void { this.run(this.api.updateProjectTask(task.id, { status })); }
   protected removeTask(task: ProjectTask): void { if (!confirm(`¿Eliminar ${task.title}?`)) return; this.run(this.api.deleteProjectTask(task.id)); }
