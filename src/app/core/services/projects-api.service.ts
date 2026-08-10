@@ -15,6 +15,7 @@ export class ProjectsApiService {
   getProjectById(id: string) { return this.getProject(id); }
   createProject(payload: CreateProjectPayload) { return this.http.post<ApiResponse<Project>>(this.url, payload).pipe(map(unwrapApiResponse)); }
   updateProject(id: string, payload: UpdateProjectPayload) { return this.http.patch<ApiResponse<Project>>(`${this.url}/${id}`, payload).pipe(map(unwrapApiResponse)); }
+  completeProject(id: string) { return this.http.post<ApiResponse<Project>>(`${this.url}/${id}/complete`, {}).pipe(map(unwrapApiResponse)); }
   deleteProject(id: string) { return this.http.delete<void>(`${this.url}/${id}`); }
   getProjectTasks(projectId: string) { return this.http.get<ApiResponse<ProjectTask[]>>(`${this.url}/${projectId}/tasks`).pipe(map(unwrapApiResponse)); }
   createProjectTask(projectId: string, payload: CreateProjectTaskPayload) { return this.http.post<ApiResponse<ProjectTask>>(`${this.url}/${projectId}/tasks`, payload).pipe(map(unwrapApiResponse)); }

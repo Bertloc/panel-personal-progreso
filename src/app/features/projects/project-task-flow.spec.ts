@@ -161,6 +161,68 @@ describe('Project task flow', () => {
     expect(fixture.nativeElement.querySelector('app-project-task-form-modal')).not.toBeNull();
   });
 
+  it('only enables project completion when every non-cancelled task is completed', () => {
+    const fixture = createDetail();
+    const completeButton = () => findButton(fixture, 'Finalizar proyecto');
+    const cancelled = { ...task('cancelled'), id: 'cancelled-task' };
+
+    fixture.componentInstance['tasks'].set([]);
+    fixture.detectChanges();
+    expect(completeButton().disabled).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Agrega y completa al menos una tarea antes de finalizar.');
+
+    fixture.componentInstance['tasks'].set([task('pending'), cancelled]);
+    fixture.detectChanges();
+    expect(completeButton().disabled).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Este proyecto aún tiene 1 tarea pendiente.');
+
+    fixture.componentInstance['tasks'].set([task('completed'), cancelled]);
+    fixture.detectChanges();
+    expect(completeButton().disabled).toBe(false);
+    const projectStatus = Array.from<HTMLSelectElement>(fixture.nativeElement.querySelectorAll('select')).find((select) => select.parentElement?.textContent?.includes('Actualizar estado'))!;
+    expect(Array.from(projectStatus.options).map(({ value }) => value)).not.toContain('completed');
+  });
+
+  it('completes the project through its dedicated endpoint and reloads it', () => {
+    const fixture = createDetail('completed');
+    const originalConfirm = window.confirm;
+    let confirmation = '';
+    window.confirm = (message) => { confirmation = String(message); return true; };
+    try {
+      findButton(fixture, 'Finalizar proyecto').click();
+      const request = http.expectOne(`${API_BASE_URL}/projects/${project.id}/complete`);
+      expect(request.request.method).toBe('POST');
+      expect(request.request.body).toEqual({});
+      const completedProject = { ...project, status: 'completed' as const, progressPercent: 100 };
+      request.flush(completedProject);
+      http.expectOne(`${API_BASE_URL}/projects/${project.id}`).flush(completedProject);
+      http.expectOne(`${API_BASE_URL}/projects/${project.id}/tasks`).flush([task('completed'), { ...task('cancelled'), id: 'cancelled-task' }]);
+      fixture.detectChanges();
+
+      expect(confirmation).toBe('¿Finalizar este proyecto?');
+      expect(fixture.nativeElement.textContent).toContain('Este proyecto ya está completado.');
+      expect(fixture.nativeElement.textContent).toContain('100%');
+      expect(fixture.nativeElement.textContent).toContain('1/1 tareas completadas');
+      expect(Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button')).some(({ textContent }) => textContent?.includes('Finalizar proyecto'))).toBe(false);
+    } finally {
+      window.confirm = originalConfirm;
+    }
+  });
+
+  it('explains a 400 response when project completion conditions changed', () => {
+    const fixture = createDetail('completed');
+    const originalConfirm = window.confirm;
+    window.confirm = () => true;
+    try {
+      findButton(fixture, 'Finalizar proyecto').click();
+      http.expectOne(`${API_BASE_URL}/projects/${project.id}/complete`).flush({ message: 'Project has unfinished tasks' }, { status: 400, statusText: 'Bad Request' });
+      fixture.detectChanges();
+      expect(fixture.nativeElement.textContent).toContain('Verifica que tenga al menos una tarea y que todas las tareas activas estén completadas.');
+    } finally {
+      window.confirm = originalConfirm;
+    }
+  });
+
   function createDetail(status: ProjectTask['status'] = 'pending'): ComponentFixture<ProjectDetailPage> {
     const fixture = TestBed.createComponent(ProjectDetailPage);
     http.expectOne(`${API_BASE_URL}/projects/${project.id}`).flush(project);

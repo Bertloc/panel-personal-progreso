@@ -10,6 +10,8 @@ select { width: 100%; border: 1px solid var(--color-border); border-radius: 13px
 button { border: 0; border-radius: 13px; padding: 12px; background: var(--color-purple); color: white; cursor: pointer; font-weight: 750; }
 button.secondary { border: 1px solid var(--color-border); background: transparent; color: var(--color-text-secondary); }
 button.danger { background: rgb(255 77 109 / .14); color: var(--color-red); }
+button:disabled { cursor: not-allowed; opacity: .5; }
+.completion-error { margin: 0; color: var(--color-red); }
 .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .money-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .money-grid div { display: grid; gap: 6px; min-width: 0; }

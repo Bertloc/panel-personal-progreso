@@ -1,3 +1,4 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
@@ -24,13 +25,14 @@ import { ProjectTaskFormModal } from './project-task-form-modal';
           <div class="badges"><span [class]="statusClass(current.status)">{{ statusLabel(current.status) }}</span><span [class]="priorityClass(current.priority)">{{ priorityLabel(current.priority) }}</span><span class="status-badge">{{ current.category || 'Sin categoría' }}</span></div>
           <div class="split-line"><span>Avance calculado</span><strong>{{ progress() }}%</strong></div>
           <div class="progress-track progress-track--large"><span class="progress-fill progress-fill--purple" [style.width.%]="progress()"></span></div>
-          <p class="meta">{{ completedTasks() }}/{{ tasks().length }} tareas completadas</p>
+          <p class="meta">{{ completedTasks() }}/{{ activeTasks().length }} tareas completadas</p>
           <div class="dates">@if (current.startDate) { <span>Inicio: {{ formatDate(current.startDate) }}</span> } @if (current.targetDate) { <span>Meta: {{ formatDate(current.targetDate) }}</span> }</div>
         </section>
 
         <section class="surface-card section-stack">
           <h2 class="section-card-title">Estado del proyecto</h2>
-          <label>Actualizar estado <select [value]="current.status" [disabled]="saving()" (change)="changeProjectStatus($any($event.target).value)">@for (option of projectStatuses; track option.value) { <option [value]="option.value">{{ option.label }}</option> }</select></label>
+          @if (current.status === 'completed') { <p class="meta"><strong>Completado</strong></p> }
+          @else { <label>Actualizar estado <select [value]="current.status" [disabled]="saving()" (change)="changeProjectStatus($any($event.target).value)">@for (option of projectStatuses; track option.value) { <option [value]="option.value">{{ option.label }}</option> }</select></label> }
         </section>
 
         <section class="section-stack">
@@ -51,6 +53,16 @@ import { ProjectTaskFormModal } from './project-task-form-modal';
         }
 
         <section class="surface-card section-stack"><h2 class="section-card-title">Acciones</h2><div class="actions project-actions"><button type="button" (click)="editProject.set(true)">Editar proyecto</button><button class="danger" type="button" (click)="archive(current)">Archivar proyecto</button></div></section>
+
+        <section class="surface-card section-stack">
+          <h2 class="section-card-title">Finalizar proyecto</h2>
+          @if (current.status === 'completed') { <p class="meta"><strong>Este proyecto ya está completado.</strong></p> }
+          @else {
+            @if (completionHint()) { <p class="meta">{{ completionHint() }}</p> }
+            @if (completionError()) { <p class="completion-error" role="alert">{{ completionError() }}</p> }
+            <button type="button" [disabled]="!canCompleteProject() || saving()" (click)="completeProject()">Finalizar proyecto</button>
+          }
+        </section>
       }
     </div>
 
@@ -70,20 +82,25 @@ export class ProjectDetailPage {
   protected readonly loading = signal(true);
   protected readonly saving = signal(false);
   protected readonly error = signal(false);
+  protected readonly completionError = signal('');
   protected readonly editProject = signal(false);
   protected readonly taskEditor = signal<{ task: ProjectTask | null } | null>(null);
   private loadVersion = 0;
+  protected readonly activeTasks = computed(() => this.tasks().filter(({ status }) => status !== 'cancelled'));
   protected readonly completedTasks = computed(() => this.tasks().filter(({ status }) => status === 'completed').length);
-  protected readonly progress = computed(() => this.tasks().length ? Math.round((this.completedTasks() / this.tasks().length) * 100) : Math.max(0, Math.min(100, Math.round(Number(this.project()?.progressPercent) || 0))));
+  protected readonly progress = computed(() => this.project()?.status === 'completed' ? 100 : this.activeTasks().length ? Math.round((this.completedTasks() / this.activeTasks().length) * 100) : Math.max(0, Math.min(100, Math.round(Number(this.project()?.progressPercent) || 0))));
   protected readonly actualCost = computed(() => this.project()?.actualCost ?? this.tasks().reduce((sum, task) => sum + (Number(task.actualCost) || 0), 0));
-  protected readonly projectStatuses: { value: ProjectStatus; label: string }[] = [{ value: 'planned', label: 'Planeado' }, { value: 'active', label: 'Activo' }, { value: 'paused', label: 'En pausa' }, { value: 'completed', label: 'Completado' }, { value: 'cancelled', label: 'Cancelado' }, { value: 'archived', label: 'Archivado' }];
+  protected readonly unfinishedTasks = computed(() => this.activeTasks().filter(({ status }) => status !== 'completed').length);
+  protected readonly canCompleteProject = computed(() => this.activeTasks().length > 0 && this.unfinishedTasks() === 0);
+  protected readonly completionHint = computed(() => !this.activeTasks().length ? 'Agrega y completa al menos una tarea antes de finalizar.' : this.unfinishedTasks() ? `Este proyecto aún tiene ${this.unfinishedTasks()} ${this.unfinishedTasks() === 1 ? 'tarea pendiente' : 'tareas pendientes'}.` : '');
+  protected readonly projectStatuses: { value: ProjectStatus; label: string }[] = [{ value: 'planned', label: 'Planeado' }, { value: 'active', label: 'Activo' }, { value: 'paused', label: 'En pausa' }, { value: 'cancelled', label: 'Cancelado' }, { value: 'archived', label: 'Archivado' }];
   protected readonly taskStatuses: { value: ProjectTaskStatus; label: string }[] = [{ value: 'pending', label: 'Pendiente' }, { value: 'in_progress', label: 'En progreso' }, { value: 'blocked', label: 'Bloqueada' }, { value: 'completed', label: 'Completada' }, { value: 'cancelled', label: 'Cancelada' }];
 
   constructor() { this.load(); this.events.projectChanged$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.load()); }
 
   protected load(): void {
     const version = ++this.loadVersion;
-    this.loading.set(!this.project()); this.error.set(false);
+    this.loading.set(!this.project()); this.error.set(false); this.completionError.set('');
     forkJoin({ project: this.api.getProject(this.id), tasks: this.api.getProjectTasks(this.id) }).pipe(finalize(() => { if (version === this.loadVersion) this.loading.set(false); }), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: ({ project, tasks }) => { if (version === this.loadVersion) { this.project.set(project); this.tasks.set(tasks); } },
       error: () => { if (version === this.loadVersion && !this.project()) { this.tasks.set([]); this.error.set(true); } },
@@ -99,6 +116,14 @@ export class ProjectDetailPage {
   protected changeProjectStatus(status: ProjectStatus): void { this.run(this.api.updateProject(this.id, { status })); }
   protected changeTaskStatus(task: ProjectTask, status: ProjectTaskStatus): void { this.run(this.api.updateProjectTask(task.id, { status })); }
   protected removeTask(task: ProjectTask): void { if (!confirm(`¿Eliminar ${task.title}?`)) return; this.run(this.api.deleteProjectTask(task.id)); }
+  protected completeProject(): void {
+    if (!this.canCompleteProject() || !confirm('¿Finalizar este proyecto?')) return;
+    this.saving.set(true); this.completionError.set('');
+    this.api.completeProject(this.id).pipe(finalize(() => this.saving.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (project) => { this.project.set(project); this.events.notifyProjectChanged(); },
+      error: (error: unknown) => this.completionError.set(error instanceof HttpErrorResponse && error.status === 400 ? 'No se puede finalizar el proyecto. Verifica que tenga al menos una tarea y que todas las tareas activas estén completadas.' : 'No se pudo finalizar el proyecto. Intenta de nuevo.'),
+    });
+  }
   protected archive(project: Project): void { if (!confirm(`¿Archivar ${project.name}?`)) return; this.saving.set(true); this.api.deleteProject(project.id).pipe(finalize(() => this.saving.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({ next: () => void this.router.navigateByUrl('/projects').then(() => this.events.notifyProjectChanged()), error: () => this.error.set(true) }); }
   protected statusLabel(status: ProjectStatus): string { return this.projectStatuses.find(({ value }) => value === status)?.label ?? status; }
   protected taskStatusLabel(status: ProjectTaskStatus): string { return this.taskStatuses.find(({ value }) => value === status)?.label ?? status; }
