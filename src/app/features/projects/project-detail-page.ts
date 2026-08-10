@@ -40,7 +40,7 @@ import { ProjectTaskFormModal } from './project-task-form-modal';
               <div class="split-line"><strong>{{ task.title }}</strong><span [class]="priorityClass(task.priority)">{{ priorityLabel(task.priority) }}</span></div>
               @if (task.description) { <p>{{ task.description }}</p> }
               <div class="task-meta"><span>{{ taskStatusLabel(task.status) }}</span><span>{{ task.dueDate ? formatDate(task.dueDate) : 'Sin fecha límite' }}</span>@if (task.estimatedCost !== null && task.estimatedCost !== undefined) { <span>Estimado {{ task.estimatedCost | appCurrency }}</span> }@if (task.actualCost !== null && task.actualCost !== undefined) { <span>Real {{ task.actualCost | appCurrency }}</span> }</div>
-              <label>Estado <select [value]="task.status" [disabled]="saving()" (change)="changeTaskStatus(task, $any($event.target).value)">@for (option of taskStatuses; track option.value) { <option [value]="option.value">{{ option.label }}</option> }</select></label>
+              <label>Estado <select [disabled]="saving()" (change)="changeTaskStatus(task, $any($event.target).value)">@for (option of taskStatuses; track option.value) { <option [value]="option.value" [selected]="option.value === task.status">{{ option.label }}</option> }</select></label>
               <div class="actions"><button class="secondary" type="button" (click)="openTask(task)">Editar</button><button class="danger" type="button" (click)="removeTask(task)">Eliminar</button></div>
             </article>
           } @empty { <section class="surface-card state">Este proyecto aún no tiene tareas.</section> }
@@ -73,6 +73,7 @@ export class ProjectDetailPage {
   protected readonly editProject = signal(false);
   protected readonly taskEditor = signal(false);
   protected readonly editingTask = signal<ProjectTask | null>(null);
+  private loadVersion = 0;
   protected readonly completedTasks = computed(() => this.tasks().filter(({ status }) => status === 'completed').length);
   protected readonly progress = computed(() => this.tasks().length ? Math.round((this.completedTasks() / this.tasks().length) * 100) : Math.max(0, Math.min(100, Math.round(Number(this.project()?.progressPercent) || 0))));
   protected readonly actualCost = computed(() => this.project()?.actualCost ?? this.tasks().reduce((sum, task) => sum + (Number(task.actualCost) || 0), 0));
@@ -82,8 +83,12 @@ export class ProjectDetailPage {
   constructor() { this.load(); this.events.projectChanged$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.load()); }
 
   protected load(): void {
-    this.loading.set(true); this.error.set(false); this.project.set(null); this.tasks.set([]);
-    forkJoin({ project: this.api.getProject(this.id), tasks: this.api.getProjectTasks(this.id) }).pipe(finalize(() => this.loading.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({ next: ({ project, tasks }) => { this.project.set(project); this.tasks.set(tasks); }, error: () => { this.project.set(null); this.tasks.set([]); this.error.set(true); } });
+    const version = ++this.loadVersion;
+    this.loading.set(!this.project()); this.error.set(false);
+    forkJoin({ project: this.api.getProject(this.id), tasks: this.api.getProjectTasks(this.id) }).pipe(finalize(() => { if (version === this.loadVersion) this.loading.set(false); }), takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: ({ project, tasks }) => { if (version === this.loadVersion) { this.project.set(project); this.tasks.set(tasks); } },
+      error: () => { if (version === this.loadVersion && !this.project()) { this.tasks.set([]); this.error.set(true); } },
+    });
   }
   protected openTask(task: ProjectTask | null = null): void { this.editingTask.set(task); this.taskEditor.set(true); }
   protected closeTask(): void { this.taskEditor.set(false); this.editingTask.set(null); }
@@ -100,6 +105,6 @@ export class ProjectDetailPage {
 
   private run(request: Observable<unknown>): void {
     this.saving.set(true); this.error.set(false);
-    request.pipe(finalize(() => this.saving.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({ next: () => { this.load(); this.events.notifyProjectChanged(); }, error: () => this.error.set(true) });
+    request.pipe(finalize(() => this.saving.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({ next: () => this.events.notifyProjectChanged(), error: () => this.error.set(true) });
   }
 }
