@@ -55,7 +55,7 @@ import { QuickAction, QuickCreate } from '../quick-create/quick-create';
     }
     .main span { line-height: 1; transition: transform 180ms ease; }
     .radial--open .main span { transform: rotate(180deg); }
-    .actions { position: absolute; right: 0; bottom: 68px; display: grid; justify-items: end; gap: 10px; width: max-content; }
+    .actions { position: absolute; right: 0; bottom: 68px; display: grid; justify-items: end; gap: 10px; width: max-content; pointer-events: none; }
     .action {
       position: relative;
       display: grid;
@@ -78,6 +78,7 @@ import { QuickAction, QuickCreate } from '../quick-create/quick-create';
       transform: translateY(0) scale(1);
       transition-delay: calc(var(--index) * 24ms);
     }
+    .radial--open .actions { pointer-events: auto; }
     .icon { display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid color-mix(in srgb, var(--accent), white 18%); border-radius: 50%; background: var(--accent); box-shadow: 0 8px 24px rgb(0 0 0 / 34%); color: white; font-size: 1.15rem; }
     .label { padding: 8px 11px; border-radius: 12px; background: #25272c; color: var(--color-text); box-shadow: 0 6px 20px rgb(0 0 0 / 22%); font-size: .78rem; font-weight: 750; white-space: nowrap; }
     .toast { position: fixed; z-index: 50; left: 50%; bottom: calc(92px + env(safe-area-inset-bottom)); margin: 0; padding: 11px 16px; transform: translateX(-50%); border: 1px solid rgb(74 222 128 / 35%); border-radius: 999px; background: #102018; color: var(--color-green); box-shadow: 0 10px 30px rgb(0 0 0 / 45%); font-size: .84rem; font-weight: 700; white-space: nowrap; }

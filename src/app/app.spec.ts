@@ -53,6 +53,10 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
     const mainButton: HTMLButtonElement = fixture.nativeElement.querySelector('.main');
+    const actions: HTMLDivElement = fixture.nativeElement.querySelector('.actions');
+
+    expect(getComputedStyle(actions).pointerEvents).toBe('none');
+    expect(fixture.nativeElement.querySelector('.backdrop')).toBeNull();
 
     mainButton.click();
     fixture.detectChanges();
@@ -60,11 +64,13 @@ describe('App', () => {
     expect(mainButton.getAttribute('aria-expanded')).toBe('true');
     expect(mainButton.textContent?.trim()).toBe('×');
     expect(fixture.nativeElement.querySelectorAll('.action')).toHaveLength(6);
+    expect(getComputedStyle(actions).pointerEvents).toBe('auto');
 
     fixture.nativeElement.querySelector('.backdrop').click();
     fixture.detectChanges();
     expect(mainButton.getAttribute('aria-expanded')).toBe('false');
     expect(fixture.nativeElement.querySelector('.backdrop')).toBeNull();
+    expect(getComputedStyle(actions).pointerEvents).toBe('none');
   });
 
   it('should send a valid expense through the existing money endpoint', () => {
