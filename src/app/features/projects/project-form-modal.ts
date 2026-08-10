@@ -13,17 +13,20 @@ import { ActionModal } from '../../shared/components/action-modal/action-modal';
   template: `
     <app-action-modal [title]="project() ? 'Editar proyecto' : 'Crear proyecto'" (close)="close.emit()">
       <form [formGroup]="form" (ngSubmit)="save()">
-        <label>Nombre <input formControlName="name" maxlength="100" /></label>
+        <label>Nombre * <input formControlName="name" maxlength="100" /></label>
+        @if (form.controls.name.hasError('required')) { <small class="error" role="alert">El nombre es obligatorio.</small> }
+        @if (form.controls.name.hasError('maxlength')) { <small class="error" role="alert">El nombre no puede superar los 100 caracteres.</small> }
         <label>Descripción (opcional) <textarea formControlName="description" rows="3"></textarea></label>
         <div class="field-grid">
           <label>Categoría <select formControlName="category">@for (option of categories; track option.value) { <option [value]="option.value">{{ option.label }}</option> }</select></label>
-          <label>Prioridad <select formControlName="priority">@for (option of priorities; track option.value) { <option [value]="option.value">{{ option.label }}</option> }</select></label>
-          <label>Estado <select formControlName="status">@for (option of statuses; track option.value) { <option [value]="option.value">{{ option.label }}</option> }</select></label>
+          <label>Prioridad * <select formControlName="priority">@for (option of priorities; track option.value) { <option [value]="option.value">{{ option.label }}</option> }</select></label>
+          @if (project()) { <label>Estado <select formControlName="status">@for (option of statuses; track option.value) { <option [value]="option.value">{{ option.label }}</option> }</select></label> }
           <label>Inicio (opcional) <input formControlName="startDate" type="date" /></label>
           <label>Meta (opcional) <input formControlName="targetDate" type="date" /></label>
         </div>
         <label class="check"><input formControlName="consumesMoney" type="checkbox" /> Este proyecto consume dinero</label>
         @if (form.controls.consumesMoney.value) { <label>Presupuesto <input formControlName="budgetAmount" type="number" min="0" step="0.01" /></label> }
+        <small>* Campo obligatorio</small>
         @if (error()) { <p class="error" role="alert">{{ error() }}</p> }
         <div class="actions"><button class="secondary" type="button" (click)="close.emit()">Cancelar</button><button type="submit" [disabled]="form.invalid || saving()">{{ saving() ? 'Guardando…' : 'Guardar' }}</button></div>
       </form>
@@ -45,7 +48,7 @@ export class ProjectFormModal {
   protected readonly priorities: { value: ProjectPriority; label: string }[] = [{ value: 'low', label: 'Baja' }, { value: 'medium', label: 'Media' }, { value: 'high', label: 'Alta' }, { value: 'urgent', label: 'Urgente' }];
   protected readonly statuses: { value: ProjectStatus; label: string }[] = [{ value: 'planned', label: 'Planeado' }, { value: 'active', label: 'Activo' }, { value: 'paused', label: 'En pausa' }, { value: 'completed', label: 'Completado' }, { value: 'cancelled', label: 'Cancelado' }, { value: 'archived', label: 'Archivado' }];
   protected readonly form = this.fb.nonNullable.group({
-    name: ['', Validators.required], description: '', category: 'personal',
+    name: ['', [Validators.required, Validators.maxLength(100)]], description: '', category: 'personal',
     priority: this.fb.nonNullable.control<ProjectPriority>('medium', Validators.required),
     status: this.fb.nonNullable.control<ProjectStatus>('planned', Validators.required),
     startDate: '', targetDate: '', consumesMoney: false,
@@ -57,8 +60,19 @@ export class ProjectFormModal {
   protected save(): void {
     if (this.form.invalid || this.saving()) return;
     const value = this.form.getRawValue();
-    const payload = { ...value, description: value.description || null, category: value.category || null, startDate: value.startDate || null, targetDate: value.targetDate || null, budgetAmount: value.consumesMoney ? value.budgetAmount : null };
-    const request = this.project() ? this.api.updateProject(this.project()!.id, payload) : this.api.createProject(payload);
+    const project = this.project();
+    const payload = {
+      name: value.name,
+      category: value.category,
+      priority: value.priority,
+      status: project ? value.status : 'planned' as const,
+      consumesMoney: value.consumesMoney,
+      ...(value.description ? { description: value.description } : project ? { description: null } : {}),
+      ...(value.startDate ? { startDate: value.startDate } : project ? { startDate: null } : {}),
+      ...(value.targetDate ? { targetDate: value.targetDate } : project ? { targetDate: null } : {}),
+      ...(value.consumesMoney && value.budgetAmount !== null ? { budgetAmount: value.budgetAmount } : {}),
+    };
+    const request = project ? this.api.updateProject(project.id, payload) : this.api.createProject(payload);
     this.saving.set(true); this.error.set('');
     request.pipe(finalize(() => this.saving.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (project) => { this.events.notifyProjectChanged(); this.saved.emit(project); },
