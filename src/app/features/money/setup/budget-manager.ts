@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, output, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize, forkJoin } from 'rxjs';
 import { BudgetPeriodType } from '../../../core/models/budgets.model';
@@ -37,6 +37,7 @@ import { QuickCreateEventsService } from '../../../core/services/quick-create-ev
   styleUrl: './setup-manager.css',
 })
 export class BudgetManager {
+  readonly saved = output<void>();
   private readonly fb = inject(FormBuilder);
   private readonly budgets = inject(BudgetsApiService);
   private readonly money = inject(MoneyApiService);
@@ -71,7 +72,7 @@ export class BudgetManager {
     this.saving.set(true); this.error.set(''); this.success.set(false);
     (this.currentId ? this.budgets.updateCurrentBudget(payload) : this.budgets.saveCurrentBudget(payload))
       .pipe(finalize(() => this.saving.set(false))).subscribe({
-        next: () => { this.success.set(true); this.events.notifyMoneyChanged(); this.load(); },
+        next: () => { this.success.set(true); this.events.notifyMoneyChanged(); this.saved.emit(); this.load(); },
         error: () => this.error.set('No se pudo guardar el presupuesto.'),
       });
   }

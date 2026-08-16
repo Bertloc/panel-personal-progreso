@@ -250,7 +250,7 @@ describe('App', () => {
     request.flush({ id: 'gym', name: 'Gym', amount: 450, frequency: 'monthly', isFixed: true, isActive: true });
   });
 
-  it('should render real debt and saving tabs with loaded data', () => {
+  it('should render money tabs and open their contextual actions without setup links', () => {
     const fixture = TestBed.createComponent(MoneyPage);
     const http = TestBed.inject(HttpTestingController);
     http.expectOne(apiUrl('/money/categories')).flush([]);
@@ -265,10 +265,44 @@ describe('App', () => {
     fixture.componentInstance['activeTab'].set('debt');
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Tarjeta');
+    const button = (label: string) => Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button')).find((item) => item.textContent?.trim() === label)!;
+    button('＋ Agregar').click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-debts-manager')).not.toBeNull();
+    http.expectOne(apiUrl('/debts')).flush([]);
+    fixture.componentInstance['modal'].set(null);
 
     fixture.componentInstance['activeTab'].set('saving');
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Viaje');
+    button('＋ Agregar').click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-savings-manager')).not.toBeNull();
+    http.expectOne(apiUrl('/savings/goals')).flush([]);
+    fixture.componentInstance['modal'].set(null);
+
+    fixture.componentInstance['activeTab'].set('budget');
+    fixture.detectChanges();
+    button('Registrar gasto').click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-quick-create')).not.toBeNull();
+    http.expectOne(apiUrl('/money/categories')).flush([]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-quick-create a[href="/money/setup"]')).toBeNull();
+    fixture.componentInstance['modal'].set(null);
+    fixture.detectChanges();
+    button('Administrar categorías').click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-category-manager')).not.toBeNull();
+    http.expectOne(apiUrl('/money/categories')).flush([]);
+    fixture.componentInstance['modal'].set(null);
+    fixture.detectChanges();
+    button('Editar presupuesto').click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-budget-manager')).not.toBeNull();
+    http.expectOne((request) => request.url === apiUrl('/money/categories') && request.params.get('type') === 'expense').flush([]);
+    http.expectOne(apiUrl('/budgets/current')).flush({ current: null, limits: [], summary: null });
+    expect(fixture.nativeElement.querySelector('a[href="/money/setup"]')).toBeNull();
   });
 
   it('should format currency without MX prefix', () => {

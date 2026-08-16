@@ -38,7 +38,10 @@ const ACTION_TITLES: Record<QuickAction, string> = {
               </select>
             </label>
             @if (!loadingOptions() && !error() && !categories().length) {
-              <p class="empty">Primero crea una categoría de gasto. <a routerLink="/money/setup" (click)="close.emit()">Ir a configurar dinero</a></p>
+              <p class="empty">Primero crea una categoría de gasto.
+                @if (contextualCategories()) { <button class="inline-link" type="button" (click)="manageCategories.emit()">Administrar categorías</button> }
+                @else { <a routerLink="/money/setup" (click)="close.emit()">Ir a configurar dinero</a> }
+              </p>
             }
             <label>Monto <input formControlName="amount" type="number" min="0.01" step="0.01" inputmode="decimal"></label>
             <label>Fecha <input formControlName="date" type="date"></label>
@@ -113,6 +116,7 @@ const ACTION_TITLES: Record<QuickAction, string> = {
     .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 6px; }
     button { border: 0; border-radius: 13px; padding: 13px; background: var(--color-purple); color: white; cursor: pointer; font-weight: 750; }
     button.secondary { border: 1px solid var(--color-border); background: transparent; color: var(--color-text-secondary); }
+    button.inline-link { padding: 0; background: transparent; color: #b8beff; }
     button:disabled { cursor: not-allowed; opacity: .5; }
     p { margin: 0; font-size: .84rem; }
     .notice, .empty { color: var(--color-text-secondary); }
@@ -122,8 +126,10 @@ const ACTION_TITLES: Record<QuickAction, string> = {
 })
 export class QuickCreate {
   readonly action = input.required<QuickAction>();
+  readonly contextualCategories = input(false);
   readonly close = output<void>();
   readonly created = output<string>();
+  readonly manageCategories = output<void>();
   readonly categories = signal<MoneyCategoryApi[]>([]);
   readonly incomeSources = signal<IncomeSource[]>([]);
   readonly debts = signal<DebtApi[]>([]);

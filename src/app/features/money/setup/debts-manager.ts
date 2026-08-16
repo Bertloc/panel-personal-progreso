@@ -1,4 +1,4 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, output, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { DebtApi, DebtPriority, DebtStrategy } from '../../../core/models/debts.model';
@@ -38,6 +38,7 @@ import { AppCurrencyPipe } from '../../../shared/pipes/app-currency.pipe';
   styleUrl: './setup-manager.css',
 })
 export class DebtsManager {
+  readonly saved = output<void>();
   private readonly fb = inject(FormBuilder); private readonly api = inject(DebtsApiService); private readonly events = inject(QuickCreateEventsService);
   protected readonly debts = signal<DebtApi[]>([]); protected readonly loading = signal(true); protected readonly saving = signal(false); protected readonly error = signal(''); protected readonly editingId = signal<string | null>(null);
   protected readonly strategies: DebtStrategy[] = ['bank_plan', 'light', 'aggressive', 'custom'];
@@ -55,7 +56,7 @@ export class DebtsManager {
     const value = this.form.getRawValue(); const id = this.editingId();
     const payload = { ...value, minimumPayment: value.minimumPayment || null, paymentDay: value.paymentDay || null, notes: value.notes || null, status: 'active' };
     this.saving.set(true); this.error.set('');
-    (id ? this.api.updateDebt(id, payload) : this.api.createDebt(payload)).pipe(finalize(() => this.saving.set(false))).subscribe({ next: () => { this.reset(); this.events.notifyMoneyChanged(); this.load(); }, error: () => this.error.set('No se pudo guardar la deuda.') });
+    (id ? this.api.updateDebt(id, payload) : this.api.createDebt(payload)).pipe(finalize(() => this.saving.set(false))).subscribe({ next: () => { this.reset(); this.events.notifyMoneyChanged(); this.saved.emit(); this.load(); }, error: () => this.error.set('No se pudo guardar la deuda.') });
   }
   protected edit(debt: DebtApi) { this.editingId.set(debt.id); this.form.patchValue({ name: debt.name ?? '', initialAmount: Number(debt.initialAmount ?? debt.originalAmount ?? debt.totalAmount ?? 0), currentAmount: this.currentAmount(debt), minimumPayment: Number(debt.minimumPayment ?? 0), paymentDay: debt.paymentDay ?? null, strategy: debt.strategy ?? 'bank_plan', priority: debt.priority ?? 'medium', notes: debt.notes ?? '' }); }
   protected reset() { this.editingId.set(null); this.form.reset({ name: '', initialAmount: 0, currentAmount: 0, minimumPayment: 0, paymentDay: null, strategy: 'bank_plan', priority: 'medium', notes: '' }); }

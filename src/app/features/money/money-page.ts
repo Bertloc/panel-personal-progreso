@@ -15,13 +15,18 @@ import { QuickCreateEventsService } from '../../core/services/quick-create-event
 import { IncomeApiService } from '../../core/services/income-api.service';
 import { RecurringPaymentsApiService } from '../../core/services/recurring-payments-api.service';
 import { ActionModal } from '../../shared/components/action-modal/action-modal';
+import { QuickCreate } from '../../shared/components/quick-create/quick-create';
+import { BudgetManager } from './setup/budget-manager';
+import { CategoryManager } from './setup/category-manager';
+import { DebtsManager } from './setup/debts-manager';
 import { RecurringPaymentsManager } from './setup/recurring-payments-manager';
+import { SavingsManager } from './setup/savings-manager';
 import { mapMoneyView } from '../../core/mappers/api.mapper';
 import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
 
 @Component({
   selector: 'app-money-page',
-  imports: [ActionModal, AppCurrencyPipe, RecurringPaymentsManager, RouterLink],
+  imports: [ActionModal, AppCurrencyPipe, BudgetManager, CategoryManager, DebtsManager, QuickCreate, RecurringPaymentsManager, RouterLink, SavingsManager],
   template: `
     <div class="page-stack">
       <header class="page-header">
@@ -77,7 +82,7 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
       }
 
       <section class="surface-card compact-card">
-        <div class="card-head"><h2 class="section-card-title">Próximos pagos</h2><button class="card-link button-link" type="button" (click)="paymentModal.set(true)">Agregar</button></div>
+        <div class="card-head"><h2 class="section-card-title">Próximos pagos</h2><button class="card-link button-link" type="button" (click)="modal.set('payment')">Agregar</button></div>
 
         <div class="list-card">
           @for (payment of upcomingPayments; track payment.name) {
@@ -92,13 +97,19 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
             </div>
           } @empty {
             <p class="section-card-copy">Aún no has definido próximos pagos.</p>
-            <button class="card-link button-link" type="button" (click)="paymentModal.set(true)">Agregar pago recurrente</button>
+            <button class="card-link button-link" type="button" (click)="modal.set('payment')">Agregar pago recurrente</button>
           }
         </div>
       </section>
 
       <section class="surface-card compact-card">
-        <h2 class="section-card-title">Presupuesto por categoría</h2>
+        <div class="card-head">
+          <h2 class="section-card-title">Presupuesto por categoría</h2>
+          <div class="context-actions">
+            <button class="card-link button-link" type="button" (click)="modal.set('category')">Administrar categorías</button>
+            <button class="card-link button-link" type="button" (click)="modal.set('budget')">Editar presupuesto</button>
+          </div>
+        </div>
 
         <div class="list-card">
           @for (category of categories; track category.name) {
@@ -131,8 +142,8 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
             </div>
           } @empty {
             <p class="section-card-copy">Aún no has definido presupuesto por categoría.</p>
-            <a class="card-link" routerLink="/money/setup">Crear categorías</a>
-            <a class="card-link" routerLink="/money/setup">Crear presupuesto</a>
+            <button class="card-link button-link" type="button" (click)="modal.set('category')">Agregar categoría</button>
+            <button class="card-link button-link" type="button" (click)="modal.set('budget')">Crear presupuesto</button>
           }
         </div>
       </section>
@@ -165,12 +176,12 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
         <section class="surface-card empty-state">
           <h2 class="section-card-title">Deudas</h2>
           <p class="section-card-copy">Aún no tienes deudas registradas.</p>
-          <a class="card-link" routerLink="/money/setup">Agregar deuda</a>
+          <button class="card-link button-link" type="button" (click)="modal.set('debt')">Agregar deuda</button>
         </section>
       }
 
       <section class="surface-card compact-card">
-        <h2 class="section-card-title">Gastos recientes</h2>
+        <div class="card-head"><h2 class="section-card-title">Gastos recientes</h2><button class="card-link button-link" type="button" (click)="modal.set('expense')">Registrar gasto</button></div>
 
         <div class="list-card">
           @for (expense of recentExpenses; track expense.name) {
@@ -210,7 +221,7 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
             </div>
           } @empty {
             <p class="section-card-copy">Aún no tienes metas de ahorro.</p>
-            <a class="card-link" routerLink="/money/setup">Crear meta de ahorro</a>
+            <button class="card-link button-link" type="button" (click)="modal.set('saving')">Crear meta de ahorro</button>
           }
         </div>
       </section>
@@ -224,7 +235,7 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
             <div class="summary-grid debt-summary"><div><p class="card-meta">Pago mínimo mensual</p><strong>{{ debtMinimum() | appCurrency }}</strong></div><div><p class="card-meta">Progreso liquidación</p><strong class="value-green">{{ debtProgress() }}%</strong></div></div>
           </section>
           <section class="section-block">
-            <div class="section-heading"><h2>Tus deudas</h2><a routerLink="/money/setup">＋ Agregar</a></div>
+            <div class="section-heading"><h2>Tus deudas</h2><button class="card-link button-link" type="button" (click)="modal.set('debt')">＋ Agregar</button></div>
             @for (debt of debts(); track debt.id) {
               <article class="surface-card debt-card">
                 <div class="split-line"><div class="debt-name"><i [class]="'debt-dot debt-dot--' + debt.priority"></i><div><strong>{{ debt.name || 'Deuda' }}</strong><p class="card-meta">{{ debt.strategy === 'bank_plan' ? 'Plan bancario' : debt.strategy || 'Crédito' }}</p></div></div>@if (debtApr(debt); as apr) { <span [class]="debtAprClass(apr)">{{ apr }}% APR</span> }</div>
@@ -235,7 +246,7 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
             }
           </section>
         } @else {
-          <section class="surface-card empty-state"><h2 class="section-card-title">Sin deudas registradas</h2><p class="section-card-copy">Cuando agregues una deuda verás aquí su avance de liquidación.</p><a class="card-link" routerLink="/money/setup">Agregar deuda</a></section>
+          <section class="surface-card empty-state"><h2 class="section-card-title">Sin deudas registradas</h2><p class="section-card-copy">Cuando agregues una deuda verás aquí su avance de liquidación.</p><button class="card-link button-link" type="button" (click)="modal.set('debt')">Agregar deuda</button></section>
         }
       } @else {
         @if (goals().length) {
@@ -247,7 +258,7 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
             <div class="summary-grid debt-summary"><div><p class="card-meta">Aporte mensual</p><strong>{{ savingsMonthly() ? (savingsMonthly() | appCurrency) : '—' }}</strong></div><div><p class="card-meta">Avance total</p><strong class="value-green">{{ savingsProgress() }}%</strong></div></div>
           </section>
           <section class="section-block">
-            <div class="section-heading"><h2>Metas de ahorro</h2><a routerLink="/money/setup">＋ Agregar</a></div>
+            <div class="section-heading"><h2>Metas de ahorro</h2><button class="card-link button-link" type="button" (click)="modal.set('saving')">＋ Agregar</button></div>
             @for (goal of goals(); track goal.id) {
               <article class="surface-card goal-card">
                 <div class="split-line"><div><strong>{{ goal.name }}</strong>@if (goal.targetDate) { <p class="card-meta">Meta {{ formatDate(goal.targetDate) }}</p> }</div><span class="status-badge status-badge--purple">{{ goalProgress(goal) }}%</span></div>
@@ -258,15 +269,20 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
             }
           </section>
         } @else {
-          <section class="surface-card empty-state"><h2 class="section-card-title">Empieza una meta de ahorro</h2><p class="section-card-copy">Tus metas y su avance aparecerán aquí.</p><a class="card-link" routerLink="/money/setup">Crear meta</a></section>
+          <section class="surface-card empty-state"><h2 class="section-card-title">Empieza una meta de ahorro</h2><p class="section-card-copy">Tus metas y su avance aparecerán aquí.</p><button class="card-link button-link" type="button" (click)="modal.set('saving')">Crear meta</button></section>
         }
       }
       </div>
       }
     </div>
 
-    @if (paymentModal()) {
-      <app-action-modal title="Agregar próximo pago" (close)="paymentModal.set(false)"><app-recurring-payments-manager /></app-action-modal>
+    @switch (modal()) {
+      @case ('payment') { <app-action-modal title="Agregar próximo pago" (close)="modal.set(null)"><app-recurring-payments-manager /></app-action-modal> }
+      @case ('debt') { <app-action-modal title="Agregar deuda" (close)="modal.set(null)"><app-debts-manager (saved)="modal.set(null)" /></app-action-modal> }
+      @case ('saving') { <app-action-modal title="Crear meta de ahorro" (close)="modal.set(null)"><app-savings-manager (saved)="modal.set(null)" /></app-action-modal> }
+      @case ('expense') { <app-quick-create action="expense" [contextualCategories]="true" (close)="modal.set(null)" (created)="modal.set(null)" (manageCategories)="modal.set('category')" /> }
+      @case ('category') { <app-action-modal title="Administrar categorías" (close)="modal.set(null)"><app-category-manager (saved)="modal.set(null)" /></app-action-modal> }
+      @case ('budget') { <app-action-modal title="Editar presupuesto" (close)="modal.set(null)"><app-budget-manager (saved)="modal.set(null)" /></app-action-modal> }
     }
   `,
   styles: `
@@ -281,6 +297,7 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
     .money-data--hidden { display: none; }
     .loading-state { color: var(--color-text-secondary); text-align: center; }
     .button-link { border: 0; background: transparent; cursor: pointer; }
+    .context-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px 14px; }
     .pill-row { margin-top: 4px; }
 
     .api-error,
@@ -473,7 +490,7 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
     .section-block { display: grid; gap: 12px; }
     .section-heading { display: flex; align-items: center; justify-content: space-between; }
     .section-heading h2 { margin: 0; font-size: 1.15rem; }
-    .section-heading a { color: var(--color-green); text-decoration: none; }
+    .section-heading .button-link { color: var(--color-green); }
     .debt-card, .goal-card { display: grid; gap: 14px; padding: 18px; }
     .debt-name { display: flex; align-items: center; gap: 10px; }
     .debt-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--color-orange); }
@@ -506,7 +523,7 @@ export class MoneyPage {
   private readonly destroyRef = inject(DestroyRef);
   protected readonly apiError = signal(false);
   protected readonly loading = signal(true);
-  protected readonly paymentModal = signal(false);
+  protected readonly modal = signal<'payment' | 'debt' | 'saving' | 'expense' | 'category' | 'budget' | null>(null);
   protected readonly activeTab = signal<'budget' | 'debt' | 'saving'>('budget');
   protected readonly tabs = [{ id: 'budget' as const, label: 'Presupuesto' }, { id: 'debt' as const, label: 'Deuda' }, { id: 'saving' as const, label: 'Ahorro' }];
   protected readonly debts = signal<DebtApi[]>([]);
