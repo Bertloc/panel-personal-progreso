@@ -34,29 +34,31 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
         <section class="surface-card loading-state" role="status">Cargando tu resumen…</section>
       } @else if (financialReady) {
         <section class="surface-card hero-card">
-          <div class="split-line"><p class="card-label">Disponible hoy</p><span class="reset-badge">se reinicia en {{ homeSummary.resetHours }} h</span></div>
-          <strong class="hero-amount">{{ homeSummary.availableToday | appCurrency }}</strong>
-          <p class="hero-note">MXN</p>
-          <div class="hero-meta">
-            <strong>{{ homeSummary.monthlySpent | appCurrency }} gastado</strong>
-            <strong class="meta-accent">{{ monthlyRemaining | appCurrency }} restantes</strong>
+          <div class="card-head">
+            <div><p class="card-label">Este mes</p><h2 class="section-card-title">Resumen financiero</h2></div>
+            <a class="card-link" routerLink="/money">Ver dinero ↗</a>
           </div>
-          <div class="progress-track progress-track--large" aria-hidden="true">
+          <div class="financial-summary">
+            <div class="budget-total"><p class="card-label">Presupuesto del mes</p><strong class="hero-amount">{{ homeSummary.monthlyLimit | appCurrency }}</strong></div>
+            <div><p class="card-label">Gastado este mes</p><strong>{{ homeSummary.monthlySpent | appCurrency }}</strong></div>
+            <div><p class="card-label">Restante este mes</p><strong class="meta-accent">{{ monthlyRemaining | appCurrency }}</strong></div>
+          </div>
+          <div class="progress-track progress-track--large financial-progress" aria-hidden="true">
             <span class="progress-fill progress-fill--green" [style.width.%]="getProgressPercent(homeSummary.monthlySpent, homeSummary.monthlyLimit)"></span>
           </div>
-          <p class="budget-copy">de {{ homeSummary.monthlyLimit | appCurrency }} de presupuesto mensual</p>
+          <p class="budget-copy">{{ homeSummary.monthlySpent | appCurrency }} de {{ homeSummary.monthlyLimit | appCurrency }} utilizados.</p>
+          @if (budgetExceeded) { <p class="budget-alert" role="status">Presupuesto superado por {{ budgetOverage | appCurrency }}.</p> }
         </section>
 
-        <section class="mini-grid mini-grid--3">
-          <article class="surface-card compact-card"><i class="metric-icon metric-icon--orange">↘</i><p class="card-label">Gastado</p><strong>{{ homeSummary.monthlySpent | appCurrency }}</strong><p class="card-meta">este mes</p></article>
+        <section class="mini-grid">
           <article class="surface-card compact-card"><i class="metric-icon metric-icon--green">◇</i><p class="card-label">Ahorro</p><strong>{{ homeSummary.saved | appCurrency }}</strong><p class="card-meta">en metas</p></article>
           <article class="surface-card compact-card"><i class="metric-icon metric-icon--red">▭</i><p class="card-label">Deuda</p><strong>{{ homeSummary.debtLeft | appCurrency }}</strong><p class="card-meta">{{ homeSummary.debtLabel }}</p></article>
         </section>
       } @else if (!apiError()) {
         <section class="surface-card setup-card">
-          <h2 class="section-card-title">Tu base ya está lista</h2>
-          <p class="section-card-copy">Configura tu dinero para calcular tu disponible de hoy.</p>
-          <a class="card-link" routerLink="/money/setup">Configurar dinero →</a>
+          <h2 class="section-card-title">Aún no hay presupuesto mensual</h2>
+          <p class="section-card-copy">Configura un presupuesto para ver cuánto has gastado y cuánto te queda este mes.</p>
+          <a class="card-link" routerLink="/money">Ver dinero →</a>
         </section>
       }
 
@@ -104,12 +106,14 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
   `,
   styles: `
     .hero-card { padding: 22px; background: radial-gradient(circle at top right, rgb(40 215 154 / .14), transparent 42%), var(--color-card); border-color: rgb(40 215 154 / .28); }
-    .card-label, .hero-note, .card-meta { margin: 0; color: var(--color-text-secondary); }
+    .card-label, .card-meta { margin: 0; color: var(--color-text-secondary); }
     .hero-amount { display: block; margin-top: 8px; font-size: clamp(3.1rem, 14vw, 4.5rem); line-height: .92; letter-spacing: -.08em; color: var(--color-green); }
-    .hero-meta { display: flex; justify-content: space-between; gap: 12px; margin: 22px 0 10px; }
+    .financial-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px 12px; margin: 22px 0 14px; }
+    .financial-summary .budget-total { grid-column: 1 / -1; }
+    .financial-summary > div:not(.budget-total) strong { display: block; margin-top: 5px; font-size: 1.2rem; }
     .meta-accent, .accent-copy { margin: 0; color: var(--color-green); }
-    .reset-badge { padding: 5px 10px; border-radius: 999px; background: rgb(40 215 154 / .14); color: var(--color-green); font-size: .72rem; font-weight: 750; }
     .budget-copy { margin: 9px 0 0; color: var(--color-text-secondary); font-size: .82rem; }
+    .budget-alert { margin: 12px 0 0; padding: 10px 12px; border-radius: 12px; background: rgb(255 77 109 / .12); color: var(--color-red); font-weight: 700; }
     .compact-card { min-width: 0; padding: 16px; }
     .compact-card strong { display: block; margin: 4px 0 2px; font-size: 1.2rem; }
     .metric-icon { display: grid; place-items: center; width: 28px; height: 28px; margin-bottom: 12px; border-radius: 10px; background: #23252b; color: var(--color-text-secondary); font-style: normal; }
@@ -176,8 +180,10 @@ export class HomePage {
 
   get homeSummary() { return this.summary(); }
   protected get profileName() { return this.onboarding.status()?.profile?.displayName ?? ''; }
-  protected get financialReady() { return this.homeSummary.weeklyLimit > 0 || this.homeSummary.monthlyLimit > 0; }
+  protected get financialReady() { return this.homeSummary.monthlyLimit > 0; }
   protected get monthlyRemaining() { return Math.max(0, this.homeSummary.monthlyLimit - this.homeSummary.monthlySpent); }
+  protected get budgetExceeded() { return this.homeSummary.monthlySpent > this.homeSummary.monthlyLimit; }
+  protected get budgetOverage() { return Math.max(0, this.homeSummary.monthlySpent - this.homeSummary.monthlyLimit); }
   protected getProgressPercent(used: number, limit: number) { return limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0; }
   protected getHeatmapClass(value: HomeSummary['heatmap'][number]['value']) { return `heatmap-cell heatmap-cell--${value}`; }
 }

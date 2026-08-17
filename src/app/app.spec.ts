@@ -35,6 +35,10 @@ const authStub = {
   getAccessToken: () => Promise.resolve(accessToken), logout: () => Promise.resolve(), whenReady: () => Promise.resolve(),
 };
 const apiUrl = (path = '') => `${API_BASE_URL}${path}`;
+const flushHomeSecondary = (http: HttpTestingController) => {
+  http.expectOne(apiUrl('/routines/summary')).flush({ today: { total: 0, done: 0, pending: 0, completionPercent: 0 }, week: { activeDays: 0, completedDays: 0, completionPercent: 0 }, streak: { current: 0, best: 0 } });
+  http.expectOne(apiUrl('/projects/summary')).flush({ total: 0, active: 0, planned: 0, paused: 0, completed: 0, cancelled: 0, archived: 0, nearCompletion: 0, upcomingTasks: [] });
+};
 
 describe('App', () => {
   beforeEach(async () => {
@@ -197,6 +201,49 @@ describe('App', () => {
     TestBed.inject(QuickCreateEventsService).notifyMoneyChanged('income');
 
     http.expectOne(apiUrl('/dashboard/summary')).flush({ budgetRemaining: 700, availableToday: 4730 });
+  });
+
+  it('should show a clear monthly summary without the unexplained availableToday value', () => {
+    const fixture = TestBed.createComponent(HomePage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(apiUrl('/dashboard/summary')).flush({ availableToday: 10000, periodSpent: 400, budgetRemaining: 5509, currentMonthExpenses: 400 });
+    flushHomeSecondary(http);
+    fixture.detectChanges();
+    const text = fixture.nativeElement.textContent;
+
+    expect(text).toContain('Presupuesto del mes');
+    expect(text).toContain('$5,909');
+    expect(text).toContain('Gastado este mes');
+    expect(text).toContain('$400');
+    expect(text).toContain('Restante este mes');
+    expect(text).toContain('$5,509');
+    expect(text).not.toContain('Disponible hoy');
+    expect(text).not.toContain('$10,000');
+  });
+
+  it('should show an honest empty state when there is no monthly budget', () => {
+    const fixture = TestBed.createComponent(HomePage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(apiUrl('/dashboard/summary')).flush({ availableToday: 10000, currentMonthExpenses: 400 });
+    flushHomeSecondary(http);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Aún no hay presupuesto mensual');
+    expect(fixture.nativeElement.textContent).not.toContain('Presupuesto del mes');
+    expect(fixture.nativeElement.textContent).not.toContain('$10,000');
+  });
+
+  it('should explain an exceeded monthly budget and clamp only the progress bar', () => {
+    const fixture = TestBed.createComponent(HomePage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(apiUrl('/dashboard/summary')).flush({ monthlyLimit: 5000, monthlySpent: 6000 });
+    flushHomeSecondary(http);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Presupuesto superado por $1,000');
+    expect(fixture.nativeElement.textContent).toContain('Gastado este mes');
+    expect(fixture.nativeElement.textContent).toContain('$6,000');
+    expect(fixture.nativeElement.querySelector('.financial-progress .progress-fill').style.width).toBe('100%');
   });
 
   it('should toggle a routine item and refresh today', () => {
