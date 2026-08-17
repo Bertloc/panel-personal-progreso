@@ -1,4 +1,4 @@
-import { Component, inject, output, signal } from '@angular/core';
+import { Component, inject, input, output, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { CategoryPriority, CategoryType, MoneyCategoryApi } from '../../../core/models/money.model';
@@ -43,6 +43,7 @@ import { priorityToClass, priorityToColor } from '../../../core/utils/priority-c
   styleUrl: './setup-manager.css',
 })
 export class CategoryManager {
+  readonly contextual = input(false);
   readonly saved = output<void>();
   private readonly fb = inject(FormBuilder);
   private readonly api = inject(MoneyApiService);
@@ -72,7 +73,7 @@ export class CategoryManager {
     this.saving.set(true); this.error.set('');
     (id ? this.api.updateCategory(id, payload) : this.api.createCategory(payload))
       .pipe(finalize(() => this.saving.set(false))).subscribe({
-        next: () => { this.cancelEdit(); this.events.notifyMoneyChanged(); this.saved.emit(); this.load(); },
+        next: () => { this.cancelEdit(); this.events.notifyMoneyChanged(); this.saved.emit(); if (!this.contextual()) this.load(); },
         error: () => this.error.set('No se pudo guardar la categoría.'),
       });
   }

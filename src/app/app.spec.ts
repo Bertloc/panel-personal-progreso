@@ -25,6 +25,7 @@ import { firstValueFrom, of } from 'rxjs';
 import { OnboardingStateService } from './core/services/onboarding-state.service';
 import { priorityToClass, priorityToColor } from './core/utils/priority-color.util';
 import { MoneyPage } from './features/money/money-page';
+import { DebtsManager } from './features/money/setup/debts-manager';
 import { API_BASE_URL } from './core/config/api.config';
 
 let accessToken: string | null = null;
@@ -126,6 +127,64 @@ describe('App', () => {
     const savingRequest = http.expectOne(apiUrl('/savings/goals/goal-1/movements'));
     expect(savingRequest.request.body).toMatchObject({ amount: 300, movementDate: '2026-07-15', type: 'deposit' });
     savingRequest.flush({ id: 'movement-1', goalId: 'goal-1', amount: 300 });
+  });
+
+  it('should enforce the debt contract before sending and accept a valid debt', () => {
+    const fixture = TestBed.createComponent(DebtsManager);
+    fixture.componentRef.setInput('contextual', true);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(apiUrl('/debts')).flush([]);
+    const form = fixture.componentInstance['form'];
+
+    form.patchValue({ name: 'Tarjeta', initialAmount: 100, currentAmount: 200, minimumPayment: 0, paymentDay: 32 });
+    fixture.componentInstance['save']();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('El monto actual no puede ser mayor que el monto inicial.');
+    expect(fixture.nativeElement.textContent).toContain('El pago mínimo debe ser mayor que 0.');
+    expect(fixture.nativeElement.textContent).toContain('El día de pago debe estar entre 1 y 31.');
+    expect(form.controls.paymentDay.hasError('max')).toBe(true);
+    http.expectNone(apiUrl('/debts'));
+
+    form.patchValue({ currentAmount: 50, minimumPayment: 10, paymentDay: 0 });
+    fixture.componentInstance['save']();
+    expect(form.controls.paymentDay.hasError('min')).toBe(true);
+    http.expectNone(apiUrl('/debts'));
+
+    form.patchValue({ name: 'Tarjeta', initialAmount: 10000, currentAmount: 8500, minimumPayment: 500, paymentDay: 15, strategy: 'light', priority: 'high' });
+    fixture.componentInstance['save']();
+    const request = http.expectOne(apiUrl('/debts'));
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toMatchObject({ initialAmount: 10000, currentAmount: 8500, minimumPayment: 500, paymentDay: 15, strategy: 'light', priority: 'high' });
+    request.flush({ id: 'debt-1', name: 'Tarjeta' });
+    http.expectNone(apiUrl('/debts'));
+  });
+
+  it('should translate known debt validation responses from the backend', () => {
+    const fixture = TestBed.createComponent(DebtsManager);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(apiUrl('/debts')).flush([]);
+    fixture.componentInstance['form'].patchValue({ name: 'Tarjeta', initialAmount: 100, currentAmount: 50, minimumPayment: 10, paymentDay: 15 });
+    fixture.componentInstance['save']();
+    http.expectOne(apiUrl('/debts')).flush({ message: 'currentAmount must not be greater than initialAmount' }, { status: 400, statusText: 'Bad Request' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('El monto actual no puede ser mayor que el monto inicial.');
+  });
+
+  it('should load expense categories once on each QuickCreate opening', () => {
+    const http = TestBed.inject(HttpTestingController);
+    for (let opening = 0; opening < 5; opening++) {
+      const fixture = TestBed.createComponent(QuickCreate);
+      fixture.componentRef.setInput('action', 'expense');
+      fixture.detectChanges();
+      http.expectOne(apiUrl('/money/categories')).flush([{ id: `food-${opening}`, name: 'Comida', type: 'expense', isActive: true }]);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.loadingOptions()).toBe(false);
+      expect(fixture.componentInstance.categories()).toHaveLength(1);
+      http.expectNone(apiUrl('/money/categories'));
+      fixture.destroy();
+    }
   });
 
   it('should refresh Home when money changes', () => {

@@ -1,4 +1,4 @@
-import { Component, inject, output, signal } from '@angular/core';
+import { Component, inject, input, output, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { finalize } from 'rxjs';
 import { SavingGoalStatus, SavingsGoalApi } from '../../../core/models/savings.model';
@@ -36,6 +36,7 @@ import { AppCurrencyPipe } from '../../../shared/pipes/app-currency.pipe';
   styleUrl: './setup-manager.css',
 })
 export class SavingsManager {
+  readonly contextual = input(false);
   readonly saved = output<void>();
   private readonly fb = inject(FormBuilder); private readonly api = inject(SavingsApiService); private readonly events = inject(QuickCreateEventsService);
   protected readonly goals = signal<SavingsGoalApi[]>([]); protected readonly loading = signal(true); protected readonly saving = signal(false); protected readonly error = signal(''); protected readonly editingId = signal<string | null>(null);
@@ -49,7 +50,7 @@ export class SavingsManager {
     const value = this.form.getRawValue(); const id = this.editingId();
     const payload = { ...value, targetDate: value.targetDate || null, notes: value.notes || null, status: 'active' satisfies SavingGoalStatus };
     this.saving.set(true); this.error.set('');
-    (id ? this.api.updateGoal(id, payload) : this.api.createGoal(payload)).pipe(finalize(() => this.saving.set(false))).subscribe({ next: () => { this.reset(); this.events.notifyMoneyChanged(); this.saved.emit(); this.load(); }, error: () => this.error.set('No se pudo guardar la meta.') });
+    (id ? this.api.updateGoal(id, payload) : this.api.createGoal(payload)).pipe(finalize(() => this.saving.set(false))).subscribe({ next: () => { this.reset(); this.events.notifyMoneyChanged(); this.saved.emit(); if (!this.contextual()) this.load(); }, error: () => this.error.set('No se pudo guardar la meta.') });
   }
   protected edit(goal: SavingsGoalApi) { this.editingId.set(goal.id); this.form.patchValue({ name: goal.name, targetAmount: this.target(goal), currentAmount: this.current(goal), targetDate: goal.targetDate?.slice(0, 10) ?? '', priority: goal.priority ?? 'medium', notes: goal.notes ?? '' }); }
   protected reset() { this.editingId.set(null); this.form.reset({ name: '', targetAmount: 0, currentAmount: 0, targetDate: '', priority: 'medium', notes: '' }); }

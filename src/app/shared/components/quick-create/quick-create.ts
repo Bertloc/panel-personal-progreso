@@ -1,8 +1,8 @@
-import { Component, DestroyRef, effect, inject, input, output, signal } from '@angular/core';
+import { Component, DestroyRef, inject, input, OnInit, output, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import { finalize, Observable } from 'rxjs';
+import { finalize, Observable, take } from 'rxjs';
 import { DebtApi } from '../../../core/models/debts.model';
 import { IncomeSource } from '../../../core/models/income.model';
 import { MoneyCategoryApi } from '../../../core/models/money.model';
@@ -124,7 +124,7 @@ const ACTION_TITLES: Record<QuickAction, string> = {
     .error { color: var(--color-red); }
   `,
 })
-export class QuickCreate {
+export class QuickCreate implements OnInit {
   readonly action = input.required<QuickAction>();
   readonly contextualCategories = input(false);
   readonly close = output<void>();
@@ -152,9 +152,7 @@ export class QuickCreate {
     status: new FormControl(''), name: new FormControl(''), description: new FormControl(''), priority: new FormControl(''),
   });
 
-  constructor() {
-    effect(() => this.configure(this.action()));
-  }
+  ngOnInit(): void { this.configure(this.action()); }
 
   get title(): string { return ACTION_TITLES[this.action()]; }
 
@@ -234,7 +232,7 @@ export class QuickCreate {
     const source = sources[action];
     if (!source) return;
     this.loadingOptions.set(true);
-    source.pipe(finalize(() => this.loadingOptions.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
+    source.pipe(take(1), finalize(() => this.loadingOptions.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (items) => {
         if (action === 'expense') this.categories.set((items as MoneyCategoryApi[]).filter(({ type, isActive }) => (!type || type === 'expense') && isActive !== false));
         if (action === 'income') this.incomeSources.set((items as IncomeSource[]).filter(({ isActive }) => isActive));

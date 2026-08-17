@@ -278,11 +278,11 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
 
     @switch (modal()) {
       @case ('payment') { <app-action-modal title="Agregar próximo pago" (close)="modal.set(null)"><app-recurring-payments-manager /></app-action-modal> }
-      @case ('debt') { <app-action-modal title="Agregar deuda" (close)="modal.set(null)"><app-debts-manager (saved)="modal.set(null)" /></app-action-modal> }
-      @case ('saving') { <app-action-modal title="Crear meta de ahorro" (close)="modal.set(null)"><app-savings-manager (saved)="modal.set(null)" /></app-action-modal> }
+      @case ('debt') { <app-action-modal title="Agregar deuda" (close)="modal.set(null)"><app-debts-manager [contextual]="true" (saved)="modal.set(null)" /></app-action-modal> }
+      @case ('saving') { <app-action-modal title="Crear meta de ahorro" (close)="modal.set(null)"><app-savings-manager [contextual]="true" (saved)="modal.set(null)" /></app-action-modal> }
       @case ('expense') { <app-quick-create action="expense" [contextualCategories]="true" (close)="modal.set(null)" (created)="modal.set(null)" (manageCategories)="modal.set('category')" /> }
-      @case ('category') { <app-action-modal title="Administrar categorías" (close)="modal.set(null)"><app-category-manager (saved)="modal.set(null)" /></app-action-modal> }
-      @case ('budget') { <app-action-modal title="Editar presupuesto" (close)="modal.set(null)"><app-budget-manager (saved)="modal.set(null)" /></app-action-modal> }
+      @case ('category') { <app-action-modal title="Administrar categorías" (close)="modal.set(null)"><app-category-manager [contextual]="true" (saved)="modal.set(null)" /></app-action-modal> }
+      @case ('budget') { <app-action-modal title="Editar presupuesto" (close)="modal.set(null)"><app-budget-manager [contextual]="true" (saved)="modal.set(null)" /></app-action-modal> }
     }
   `,
   styles: `
