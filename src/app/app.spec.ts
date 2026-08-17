@@ -246,25 +246,66 @@ describe('App', () => {
     expect(fixture.nativeElement.querySelector('.financial-progress .progress-fill').style.width).toBe('100%');
   });
 
-  it('should toggle a routine item and refresh today', () => {
+  it('should complete and undo a routine item while refreshing daily progress', () => {
     const fixture = TestBed.createComponent(HabitsPage);
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
-    const pending = { routineId: 'routine-1', routineName: 'Entre semana', itemId: 'gym', title: 'Gym', priority: 'medium', isRequired: true, status: 'pending', logId: null };
-    const summary = { today: { total: 1, done: 0, pending: 1, completionPercent: 0 }, week: { activeDays: 1, completedDays: 0, completionPercent: 0 }, streak: { current: 0, best: 0 } };
-    http.expectOne(apiUrl('/routines/today')).flush({ date: '2026-06-30', dayOfWeek: 2, items: [pending], summary: { total: 1, done: 0, pending: 1, skipped: 0, missed: 0, completionPercent: 0 } });
+    const item = (itemId: string, status: 'pending' | 'done', logId: string | null = null) => ({ routineId: 'routine-1', routineName: 'Entre semana', itemId, title: `Actividad ${itemId}`, priority: 'medium', isRequired: true, status, logId });
+    const pending = item('3', 'pending');
+    const initialItems = [item('1', 'done', 'log-1'), item('2', 'done', 'log-2'), pending, item('4', 'pending'), item('5', 'pending')];
+    const summary = { today: { total: 5, done: 2, pending: 3, completionPercent: 40 }, week: { activeDays: 1, completedDays: 0, completionPercent: 0 }, streak: { current: 0, best: 0 } };
+    http.expectOne(apiUrl('/routines/today')).flush({ date: '2026-06-30', dayOfWeek: 2, items: initialItems, summary: { total: 5, done: 2, pending: 3, skipped: 0, missed: 0, completionPercent: 40 } });
     http.expectOne(apiUrl('/routines/summary')).flush(summary);
     fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('2 de 5 completadas');
+    expect(fixture.nativeElement.textContent).toContain('40%');
 
-    fixture.nativeElement.querySelector('.routine-toggle').click();
+    fixture.nativeElement.querySelectorAll('.complete-action')[0].click();
 
     const log = http.expectOne(apiUrl('/routines/logs'));
-    expect(log.request.body).toMatchObject({ routineId: 'routine-1', routineItemId: 'gym', logDate: '2026-06-30', status: 'done' });
-    log.flush({ id: 'log-1' });
-    http.expectOne(apiUrl('/routines/today')).flush({ date: '2026-06-30', dayOfWeek: 2, items: [{ ...pending, status: 'done', logId: 'log-1' }], summary: { total: 1, done: 1, pending: 0, skipped: 0, missed: 0, completionPercent: 100 } });
-    http.expectOne(apiUrl('/routines/summary')).flush({ ...summary, today: { total: 1, done: 1, pending: 0, completionPercent: 100 } });
+    expect(log.request.body).toMatchObject({ routineId: 'routine-1', routineItemId: '3', logDate: '2026-06-30', status: 'done' });
+    log.flush({ id: 'log-3' });
+    const completedItems = initialItems.map((current) => current.itemId === '3' ? { ...current, status: 'done', logId: 'log-3' } : current);
+    http.expectOne(apiUrl('/routines/today')).flush({ date: '2026-06-30', dayOfWeek: 2, items: completedItems, summary: { total: 5, done: 3, pending: 2, skipped: 0, missed: 0, completionPercent: 60 } });
+    http.expectOne(apiUrl('/routines/summary')).flush({ ...summary, today: { total: 5, done: 3, pending: 2, completionPercent: 60 } });
     fixture.detectChanges();
-    expect(fixture.nativeElement.querySelector('.routine-toggle').classList.contains('done')).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('3 de 5 completadas');
+    expect(fixture.nativeElement.textContent).toContain('60%');
+    expect(fixture.nativeElement.textContent).toContain('Completada');
+
+    fixture.nativeElement.querySelectorAll('.undo')[2].click();
+    http.expectOne(apiUrl('/routines/logs/log-3')).flush(null);
+    http.expectOne(apiUrl('/routines/today')).flush({ date: '2026-06-30', dayOfWeek: 2, items: initialItems, summary: { total: 5, done: 2, pending: 3, skipped: 0, missed: 0, completionPercent: 40 } });
+    http.expectOne(apiUrl('/routines/summary')).flush(summary);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('2 de 5 completadas');
+  });
+
+  it('should distinguish an empty day from having no configured routine', () => {
+    const fixture = TestBed.createComponent(HabitsPage);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    const emptyToday = { date: '2026-06-30', dayOfWeek: 2, items: [], summary: { total: 0, done: 0, pending: 0, skipped: 0, missed: 0, completionPercent: 0 } };
+    http.expectOne(apiUrl('/routines/today')).flush(emptyToday);
+    http.expectOne(apiUrl('/routines/summary')).flush({ today: { total: 0, done: 0, pending: 0, completionPercent: 0 }, week: { activeDays: 0, completedDays: 0, completionPercent: 0 }, streak: { current: 0, best: 0 } });
+    http.expectOne(apiUrl('/routines')).flush([{ id: 'routine-1', name: 'Fin de semana', status: 'active' }]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('No tienes actividades programadas para hoy');
+    expect(fixture.nativeElement.textContent).toContain('Administrar rutina');
+  });
+
+  it('should guide the user to create their first routine', () => {
+    const fixture = TestBed.createComponent(HabitsPage);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(apiUrl('/routines/today')).flush({ date: '2026-06-30', dayOfWeek: 2, items: [], summary: { total: 0, done: 0, pending: 0, skipped: 0, missed: 0, completionPercent: 0 } });
+    http.expectOne(apiUrl('/routines/summary')).flush({ today: { total: 0, done: 0, pending: 0, completionPercent: 0 }, week: { activeDays: 0, completedDays: 0, completionPercent: 0 }, streak: { current: 0, best: 0 } });
+    http.expectOne(apiUrl('/routines')).flush([]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Aún no has creado una rutina');
+    expect(fixture.nativeElement.textContent).toContain('Crear rutina');
   });
 
   it('should expose routine history days for Progress', () => {
