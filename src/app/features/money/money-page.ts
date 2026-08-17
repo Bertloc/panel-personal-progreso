@@ -14,6 +14,7 @@ import { SettingsApiService } from '../../core/services/settings-api.service';
 import { QuickCreateEventsService } from '../../core/services/quick-create-events.service';
 import { IncomeApiService } from '../../core/services/income-api.service';
 import { RecurringPaymentsApiService } from '../../core/services/recurring-payments-api.service';
+import { debtStrategyLabel, oneDecimalPercent, roundedPercent } from '../../core/utils/money-display.util';
 import { ActionModal } from '../../shared/components/action-modal/action-modal';
 import { QuickCreate } from '../../shared/components/quick-create/quick-create';
 import { BudgetManager } from './setup/budget-manager';
@@ -152,7 +153,7 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
       <section class="surface-card compact-card">
         <div class="card-head">
           <h2 class="section-card-title">{{ debtInfo.name || 'Deuda' }}</h2>
-          <span class="status-badge status-badge--orange">{{ debtInfo.progress }}%</span>
+          <span class="status-badge status-badge--orange">{{ roundedPercent(debtInfo.progress) }}%</span>
         </div>
 
         <div class="mini-grid debt-grid">
@@ -232,15 +233,15 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
             <strong class="hero-amount hero-amount--white">{{ debtTotal() | appCurrency }}</strong>
             <p class="hero-note">Ya pagaste {{ debtPaid() | appCurrency }} de {{ debtOriginal() | appCurrency }} originales.</p>
             <div class="progress-track"><span class="progress-fill progress-fill--purple" [style.width.%]="debtProgress()"></span></div>
-            <div class="summary-grid debt-summary"><div><p class="card-meta">Pago mínimo mensual</p><strong>{{ debtMinimum() | appCurrency }}</strong></div><div><p class="card-meta">Progreso liquidación</p><strong class="value-green">{{ debtProgress() }}%</strong></div></div>
+            <div class="summary-grid debt-summary"><div><p class="card-meta">Pago mínimo mensual</p><strong>{{ debtMinimum() | appCurrency }}</strong></div><div><p class="card-meta">Progreso liquidación</p><strong class="value-green">{{ roundedPercent(debtProgress()) }}%</strong></div></div>
           </section>
           <section class="section-block">
             <div class="section-heading"><h2>Tus deudas</h2><button class="card-link button-link" type="button" (click)="modal.set('debt')">＋ Agregar</button></div>
             @for (debt of debts(); track debt.id) {
               <article class="surface-card debt-card">
-                <div class="split-line"><div class="debt-name"><i [class]="'debt-dot debt-dot--' + debt.priority"></i><div><strong>{{ debt.name || 'Deuda' }}</strong><p class="card-meta">{{ debt.strategy === 'bank_plan' ? 'Plan bancario' : debt.strategy || 'Crédito' }}</p></div></div>@if (debtApr(debt); as apr) { <span [class]="debtAprClass(apr)">{{ apr }}% APR</span> }</div>
+                <div class="split-line"><div class="debt-name"><i [class]="'debt-dot debt-dot--' + debt.priority"></i><div><strong>{{ debt.name || 'Deuda' }}</strong><p class="card-meta">{{ debtStrategyLabel(debt.strategy) }}</p></div></div>@if (debtApr(debt); as apr) { <span [class]="debtAprClass(apr)">{{ oneDecimalPercent(apr) }}% APR</span> }</div>
                 <div class="split-line debt-values"><div><p class="card-meta">Saldo</p><strong>{{ debtBalance(debt) | appCurrency }}</strong></div><div class="align-end"><p class="card-meta">Pago mín. <b>{{ debtMinimumOf(debt) | appCurrency }}</b></p><p class="card-meta">{{ debtDue(debt) }}</p></div></div>
-                <div class="split-line payoff"><span>Liquidado</span><strong>{{ debtProgressOf(debt) }}%</strong></div>
+                <div class="split-line payoff"><span>Liquidado</span><strong>{{ roundedPercent(debtProgressOf(debt)) }}%</strong></div>
                 <div class="progress-track"><span [class]="debtProgressClass(debt.priority)" [style.width.%]="debtProgressOf(debt)"></span></div>
               </article>
             }
@@ -255,13 +256,13 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
             <strong class="hero-amount">{{ savingsCurrent() | appCurrency }}</strong>
             <p class="hero-note">Meta combinada de {{ savingsTarget() | appCurrency }} en todas tus metas.</p>
             <div class="progress-track"><span class="progress-fill progress-fill--green" [style.width.%]="savingsProgress()"></span></div>
-            <div class="summary-grid debt-summary"><div><p class="card-meta">Aporte mensual</p><strong>{{ savingsMonthly() ? (savingsMonthly() | appCurrency) : '—' }}</strong></div><div><p class="card-meta">Avance total</p><strong class="value-green">{{ savingsProgress() }}%</strong></div></div>
+            <div class="summary-grid debt-summary"><div><p class="card-meta">Aporte mensual</p><strong>{{ savingsMonthly() ? (savingsMonthly() | appCurrency) : '—' }}</strong></div><div><p class="card-meta">Avance total</p><strong class="value-green">{{ roundedPercent(savingsProgress()) }}%</strong></div></div>
           </section>
           <section class="section-block">
             <div class="section-heading"><h2>Metas de ahorro</h2><button class="card-link button-link" type="button" (click)="modal.set('saving')">＋ Agregar</button></div>
             @for (goal of goals(); track goal.id) {
               <article class="surface-card goal-card">
-                <div class="split-line"><div><strong>{{ goal.name }}</strong>@if (goal.targetDate) { <p class="card-meta">Meta {{ formatDate(goal.targetDate) }}</p> }</div><span class="status-badge status-badge--purple">{{ goalProgress(goal) }}%</span></div>
+                <div class="split-line"><div><strong>{{ goal.name }}</strong>@if (goal.targetDate) { <p class="card-meta">Meta {{ formatDate(goal.targetDate) }}</p> }</div><span class="status-badge status-badge--purple">{{ roundedPercent(goalProgress(goal)) }}%</span></div>
                 <div class="split-line goal-values"><span>{{ goalCurrent(goal) | appCurrency }} / {{ goalTarget(goal) | appCurrency }}</span>@if (goal.monthlyContribution) { <span>{{ goalMonthly(goal) | appCurrency }}/mes</span> }</div>
                 <div class="progress-track"><span class="progress-fill progress-fill--purple" [style.width.%]="goalProgress(goal)"></span></div>
                 <p class="card-meta">Falta <strong>{{ goalRemaining(goal) | appCurrency }}</strong></p>
@@ -528,6 +529,9 @@ export class MoneyPage {
   protected readonly tabs = [{ id: 'budget' as const, label: 'Presupuesto' }, { id: 'debt' as const, label: 'Deuda' }, { id: 'saving' as const, label: 'Ahorro' }];
   protected readonly debts = signal<DebtApi[]>([]);
   protected readonly goals = signal<SavingsGoalApi[]>([]);
+  protected readonly debtStrategyLabel = debtStrategyLabel;
+  protected readonly oneDecimalPercent = oneDecimalPercent;
+  protected readonly roundedPercent = roundedPercent;
   protected get paycheck() { return this.view().paycheck; }
   protected get upcomingPayments() { return this.view().upcomingPayments; }
   protected get debtInfo() { return this.view().debtInfo; }

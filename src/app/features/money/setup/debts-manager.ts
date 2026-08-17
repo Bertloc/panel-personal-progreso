@@ -5,6 +5,7 @@ import { finalize } from 'rxjs';
 import { DebtApi, DebtPriority, DebtStrategy } from '../../../core/models/debts.model';
 import { DebtsApiService } from '../../../core/services/debts-api.service';
 import { QuickCreateEventsService } from '../../../core/services/quick-create-events.service';
+import { debtPriorityLabel, debtStrategyLabel, roundedPercent } from '../../../core/utils/money-display.util';
 import { AppCurrencyPipe } from '../../../shared/pipes/app-currency.pipe';
 
 @Component({
@@ -23,8 +24,8 @@ import { AppCurrencyPipe } from '../../../shared/pipes/app-currency.pipe';
           </label>
           <label>Pago mínimo * <input formControlName="minimumPayment" type="number" min="0.01" step="0.01" />@if (form.controls.minimumPayment.touched && form.controls.minimumPayment.invalid) { <span class="field-error">El pago mínimo debe ser mayor que 0.</span> }</label>
           <label>Día de pago * <input formControlName="paymentDay" type="number" min="1" max="31" />@if (form.controls.paymentDay.touched && form.controls.paymentDay.invalid) { <span class="field-error">El día de pago debe estar entre 1 y 31.</span> }</label>
-          <label>Estrategia <select formControlName="strategy">@for (strategy of strategies; track strategy) { <option [value]="strategy">{{ strategy }}</option> }</select></label>
-          <label>Prioridad <select formControlName="priority">@for (priority of priorities; track priority) { <option [value]="priority">{{ priority }}</option> }</select></label>
+          <label>Estrategia <select formControlName="strategy">@for (strategy of strategies; track strategy) { <option [value]="strategy">{{ debtStrategyLabel(strategy) }}</option> }</select></label>
+          <label>Prioridad <select formControlName="priority">@for (priority of priorities; track priority) { <option [value]="priority">{{ debtPriorityLabel(priority) }}</option> }</select></label>
           <label class="full">Notas <textarea formControlName="notes" rows="2"></textarea></label>
         </div>
         @if (form.hasError('currentExceedsInitial') && (form.controls.initialAmount.touched || form.controls.currentAmount.touched)) { <p class="field-error">El monto actual no puede ser mayor que el monto inicial.</p> }
@@ -34,7 +35,7 @@ import { AppCurrencyPipe } from '../../../shared/pipes/app-currency.pipe';
       @if (loading()) { <p class="empty">Cargando deudas…</p> } @else if (!error()) {
         <div class="items">
           @for (debt of debts(); track debt.id) {
-            <article class="item"><div class="item-head"><strong>{{ debt.name }}</strong><strong>{{ currentAmount(debt) | appCurrency }}</strong></div><p class="meta">Mínimo: {{ minimumPayment(debt) | appCurrency }} · {{ debt.strategy || 'sin estrategia' }} · {{ debt.progressPercent ?? debt.progress ?? 0 }}%</p><div class="actions"><button class="secondary" type="button" (click)="edit(debt)">Editar</button><button class="danger" type="button" (click)="remove(debt)">Eliminar</button></div></article>
+            <article class="item"><div class="item-head"><strong>{{ debt.name }}</strong><strong>{{ currentAmount(debt) | appCurrency }}</strong></div><p class="meta">Mínimo: {{ minimumPayment(debt) | appCurrency }} · {{ debtStrategyLabel(debt.strategy) }} · {{ debtPriorityLabel(debt.priority) }} · {{ roundedPercent(debt.progressPercent ?? debt.progress) }}%</p><div class="actions"><button class="secondary" type="button" (click)="edit(debt)">Editar</button><button class="danger" type="button" (click)="remove(debt)">Eliminar</button></div></article>
           } @empty { <p class="empty">Aún no tienes deudas registradas.</p> }
         </div>
       }
@@ -50,6 +51,9 @@ export class DebtsManager {
   protected readonly debts = signal<DebtApi[]>([]); protected readonly loading = signal(true); protected readonly saving = signal(false); protected readonly error = signal(''); protected readonly editingId = signal<string | null>(null);
   protected readonly strategies: DebtStrategy[] = ['bank_plan', 'light', 'aggressive', 'custom'];
   protected readonly priorities: DebtPriority[] = ['low', 'medium', 'high', 'urgent'];
+  protected readonly debtStrategyLabel = debtStrategyLabel;
+  protected readonly debtPriorityLabel = debtPriorityLabel;
+  protected readonly roundedPercent = roundedPercent;
   protected readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required], initialAmount: [0, [Validators.required, Validators.min(.01)]], currentAmount: [0, [Validators.required, Validators.min(0)]],
     minimumPayment: [0, [Validators.required, Validators.min(.01)]], paymentDay: this.fb.control<number | null>(null, [Validators.required, Validators.min(1), Validators.max(31)]),

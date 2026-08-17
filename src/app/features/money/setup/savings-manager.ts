@@ -4,6 +4,7 @@ import { finalize } from 'rxjs';
 import { SavingGoalStatus, SavingsGoalApi } from '../../../core/models/savings.model';
 import { QuickCreateEventsService } from '../../../core/services/quick-create-events.service';
 import { SavingsApiService } from '../../../core/services/savings-api.service';
+import { roundedPercent } from '../../../core/utils/money-display.util';
 import { AppCurrencyPipe } from '../../../shared/pipes/app-currency.pipe';
 
 @Component({
@@ -27,7 +28,7 @@ import { AppCurrencyPipe } from '../../../shared/pipes/app-currency.pipe';
       @if (loading()) { <p class="empty">Cargando metas…</p> } @else if (!error()) {
         <div class="items">
           @for (goal of goals(); track goal.id) {
-            <article class="item"><div class="item-head"><strong>{{ goal.name }}</strong><strong>{{ current(goal) | appCurrency }} / {{ target(goal) | appCurrency }}</strong></div><div class="progress-track"><span class="progress-fill progress-fill--green" [style.width.%]="progress(goal)"></span></div><p class="meta">{{ progress(goal) }}% · {{ goal.targetDate || 'sin fecha objetivo' }}</p><div class="actions"><button class="secondary" type="button" (click)="edit(goal)">Editar</button><button class="danger" type="button" (click)="remove(goal)">Eliminar</button></div></article>
+            <article class="item"><div class="item-head"><strong>{{ goal.name }}</strong><strong>{{ current(goal) | appCurrency }} / {{ target(goal) | appCurrency }}</strong></div><div class="progress-track"><span class="progress-fill progress-fill--green" [style.width.%]="progress(goal)"></span></div><p class="meta">{{ roundedPercent(progress(goal)) }}% · {{ goal.targetDate || 'sin fecha objetivo' }}</p><div class="actions"><button class="secondary" type="button" (click)="edit(goal)">Editar</button><button class="danger" type="button" (click)="remove(goal)">Eliminar</button></div></article>
           } @empty { <p class="empty">Aún no tienes metas de ahorro.</p> }
         </div>
       }
@@ -41,6 +42,7 @@ export class SavingsManager {
   private readonly fb = inject(FormBuilder); private readonly api = inject(SavingsApiService); private readonly events = inject(QuickCreateEventsService);
   protected readonly goals = signal<SavingsGoalApi[]>([]); protected readonly loading = signal(true); protected readonly saving = signal(false); protected readonly error = signal(''); protected readonly editingId = signal<string | null>(null);
   protected readonly form = this.fb.nonNullable.group({ name: ['', Validators.required], targetAmount: [0, [Validators.required, Validators.min(.01)]], currentAmount: [0, Validators.min(0)], targetDate: '', priority: 'medium', notes: '' });
+  protected readonly roundedPercent = roundedPercent;
   constructor() { this.load(); }
   protected current(goal: SavingsGoalApi) { return Number(goal.currentAmount ?? goal.current ?? 0); }
   protected target(goal: SavingsGoalApi) { return Number(goal.targetAmount ?? goal.target ?? 0); }

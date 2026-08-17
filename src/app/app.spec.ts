@@ -27,6 +27,7 @@ import { priorityToClass, priorityToColor } from './core/utils/priority-color.ut
 import { MoneyPage } from './features/money/money-page';
 import { DebtsManager } from './features/money/setup/debts-manager';
 import { API_BASE_URL } from './core/config/api.config';
+import { debtPriorityLabel, debtStrategyLabel, oneDecimalPercent, roundedPercent } from './core/utils/money-display.util';
 
 let accessToken: string | null = null;
 const authStub = {
@@ -315,7 +316,7 @@ describe('App', () => {
     http.expectOne(apiUrl('/money/categories')).flush([]);
     http.expectOne(apiUrl('/money/expenses')).flush([]);
     http.expectOne(apiUrl('/budgets/current')).flush({ current: null, limits: [], summary: null });
-    http.expectOne(apiUrl('/debts')).flush([{ id: 'debt-1', name: 'Tarjeta', initialAmount: 1000, currentAmount: 600, minimumPayment: 100, status: 'active' }]);
+    http.expectOne(apiUrl('/debts')).flush([{ id: 'debt-1', name: 'Tarjeta', initialAmount: 1000, currentAmount: 600, minimumPayment: 100, progressPercent: 19.047619047619047, strategy: 'aggressive', priority: 'high', status: 'active' }]);
     http.expectOne(apiUrl('/savings/goals')).flush([{ id: 'goal-1', name: 'Viaje', currentAmount: 300, targetAmount: 1000, status: 'active' }]);
     http.expectOne(apiUrl('/settings')).flush({});
     http.expectOne(apiUrl('/income/sources')).flush([]);
@@ -324,6 +325,10 @@ describe('App', () => {
     fixture.componentInstance['activeTab'].set('debt');
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Tarjeta');
+    expect(fixture.nativeElement.textContent).toContain('Agresiva');
+    expect(fixture.nativeElement.textContent).toContain('19%');
+    expect(fixture.nativeElement.textContent).not.toContain('19.047619047619047%');
+    expect(parseFloat(fixture.nativeElement.querySelector('.debt-card .progress-fill').style.width)).toBeCloseTo(19.047619047619047);
     const button = (label: string) => Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button')).find((item) => item.textContent?.trim() === label)!;
     button('＋ Agregar').click();
     fixture.detectChanges();
@@ -370,6 +375,16 @@ describe('App', () => {
     expect(pipe.transform(126)).toBe('$126');
     expect(pipe.transform(2372.85)).toBe('$2,372.85');
     expect(pipe.transform(undefined)).toBe('$0');
+  });
+
+  it('should label debt values and round only their displayed percentage', () => {
+    expect(debtStrategyLabel('bank_plan')).toBe('Plan bancario');
+    expect(debtStrategyLabel('aggressive')).toBe('Agresiva');
+    expect(debtPriorityLabel('high')).toBe('Alta');
+    expect(roundedPercent(19.047619047619047)).toBe(19);
+    expect(roundedPercent(99.6)).toBe(100);
+    expect(oneDecimalPercent(19.047)).toBe(19);
+    expect(oneDecimalPercent(19.06)).toBe(19.1);
   });
 
   it('should derive heatmap status from daily signals', () => {
