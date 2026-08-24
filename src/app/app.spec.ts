@@ -1,6 +1,6 @@
 import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, UrlTree, provideRouter } from '@angular/router';
 import { App } from './app';
 import { groupProgressDaysByMonth, getHeatmapValueFromDay, progressPeriodRange, progressTrend } from './core/utils/heatmap.util';
 import { HomePage } from './features/home/home-page';
@@ -28,6 +28,10 @@ import { MoneyPage } from './features/money/money-page';
 import { DebtsManager } from './features/money/setup/debts-manager';
 import { API_BASE_URL } from './core/config/api.config';
 import { debtPriorityLabel, debtStrategyLabel, oneDecimalPercent, roundedPercent } from './core/utils/money-display.util';
+import { SettingsPage } from './features/settings/settings-page';
+import { authGuard } from './core/guards/auth.guard';
+import { routes } from './app.routes';
+import { vi } from 'vitest';
 
 let accessToken: string | null = null;
 const authStub = {
@@ -43,6 +47,7 @@ const flushHomeSecondary = (http: HttpTestingController) => {
 describe('App', () => {
   beforeEach(async () => {
     accessToken = null;
+    authStub.isAuthenticated.set(true);
     await TestBed.configureTestingModule({
       imports: [App],
       providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting(), { provide: AuthService, useValue: authStub }],
@@ -53,6 +58,84 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     const app = fixture.componentInstance;
     expect(app).toBeTruthy();
+  });
+
+  it('should show logout in Settings and cancel without ending the session', () => {
+    const logout = vi.spyOn(authStub, 'logout').mockResolvedValue();
+    const fixture = TestBed.createComponent(SettingsPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(apiUrl('/profiles/me')).flush({ displayName: 'Ana', currency: 'MXN', timezone: 'America/Mexico_City' });
+    http.expectOne(apiUrl('/settings')).flush({ budgetMode: 'adjusted' });
+    fixture.detectChanges();
+
+    const logoutButton: HTMLButtonElement = fixture.nativeElement.querySelector('.logout-card .logout');
+    expect(fixture.nativeElement.textContent).toContain('Cuenta');
+    expect(logoutButton.textContent?.trim()).toBe('Cerrar sesión');
+    logoutButton.click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('¿Quieres cerrar sesión?');
+    const cancel: HTMLButtonElement = fixture.nativeElement.querySelector('.confirmation-actions .secondary');
+    cancel.click();
+    fixture.detectChanges();
+
+    expect(logout).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.querySelector('app-action-modal')).toBeNull();
+  });
+
+  it('should logout once and navigate to login after confirmation', async () => {
+    const logout = vi.spyOn(authStub, 'logout').mockResolvedValue();
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    const fixture = TestBed.createComponent(SettingsPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(apiUrl('/profiles/me')).flush({ displayName: 'Ana', currency: 'MXN', timezone: 'America/Mexico_City' });
+    http.expectOne(apiUrl('/settings')).flush({ budgetMode: 'adjusted' });
+    fixture.detectChanges();
+
+    fixture.nativeElement.querySelector('.logout-card .logout').click();
+    fixture.detectChanges();
+    const confirm: HTMLButtonElement = fixture.nativeElement.querySelector('.confirmation-actions .logout');
+    confirm.click();
+    confirm.click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Cerrando sesión…');
+
+    await fixture.whenStable();
+    expect(logout).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith('/login');
+  });
+
+  it('should keep the logout confirmation open and explain an auth error', async () => {
+    vi.spyOn(authStub, 'logout').mockRejectedValue(new Error('Network error'));
+    const router = TestBed.inject(Router);
+    const navigate = vi.spyOn(router, 'navigateByUrl').mockResolvedValue(true);
+    const fixture = TestBed.createComponent(SettingsPage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(apiUrl('/profiles/me')).flush({ displayName: 'Ana', currency: 'MXN', timezone: 'America/Mexico_City' });
+    http.expectOne(apiUrl('/settings')).flush({ budgetMode: 'adjusted' });
+    fixture.detectChanges();
+
+    fixture.nativeElement.querySelector('.logout-card .logout').click();
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('.confirmation-actions .logout').click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('No se pudo cerrar la sesión. Intenta de nuevo.');
+    expect(fixture.nativeElement.querySelector('app-action-modal')).not.toBeNull();
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('should reject every private top-level route after logout', async () => {
+    authStub.isAuthenticated.set(false);
+    const decision = await TestBed.runInInjectionContext(() => authGuard({} as never, {} as never)) as boolean | UrlTree;
+    const router = TestBed.inject(Router);
+    expect(router.serializeUrl(decision as UrlTree)).toBe('/login');
+
+    for (const path of ['', 'money', 'routine', 'progress', 'projects', 'settings']) {
+      expect(routes.find((route) => route.path === path)?.canActivate).toContain(authGuard);
+    }
   });
 
   it('should open all six quick actions from the floating button', () => {

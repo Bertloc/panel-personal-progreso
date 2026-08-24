@@ -29,10 +29,9 @@ export class AuthService {
   }
 
   async logout(): Promise<void> {
-    try {
-      const { error } = await this.auth.signOut();
-      if (error) throw error;
-    } finally { this.setSession(null); }
+    const { error } = await this.auth.signOut();
+    if (error) throw error;
+    this.setSession(null);
   }
 
   async getSession(): Promise<Session | null> {

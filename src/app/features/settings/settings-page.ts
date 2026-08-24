@@ -7,10 +7,11 @@ import { SettingsApiService } from '../../core/services/settings-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { OnboardingStateService } from '../../core/services/onboarding-state.service';
 import { Router } from '@angular/router';
+import { ActionModal } from '../../shared/components/action-modal/action-modal';
 
 @Component({
   selector: 'app-settings-page',
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, ActionModal],
   template: `
     <div class="page-stack">
       <header class="page-header">
@@ -31,7 +32,21 @@ import { Router } from '@angular/router';
         <button type="submit" [disabled]="form.invalid || loading()">{{ loading() ? 'Guardando…' : 'Guardar cambios' }}</button>
       </form>
 
-      <section class="surface-card logout-card"><div><h2 class="section-card-title">Sesión</h2><p>Cierra tu sesión en este dispositivo.</p></div><button class="logout" type="button" [disabled]="loggingOut()" (click)="logout()">{{ loggingOut() ? 'Saliendo…' : 'Cerrar sesión' }}</button></section>
+      <section class="surface-card logout-card">
+        <div><h2 class="section-card-title">Cuenta</h2><p>Cierra tu sesión en este dispositivo.</p></div>
+        <button class="logout" type="button" (click)="requestLogout()">Cerrar sesión</button>
+      </section>
+
+      @if (confirmingLogout()) {
+        <app-action-modal title="¿Quieres cerrar sesión?" (close)="cancelLogout()">
+          <p class="confirmation-copy">Tendrás que volver a iniciar sesión para acceder a tu información.</p>
+          @if (logoutError()) { <p class="logout-error" role="alert">{{ logoutError() }}</p> }
+          <div class="confirmation-actions">
+            <button class="secondary" type="button" [disabled]="loggingOut()" (click)="cancelLogout()">Cancelar</button>
+            <button class="logout" type="button" [disabled]="loggingOut()" (click)="confirmLogout()">{{ loggingOut() ? 'Cerrando sesión…' : 'Cerrar sesión' }}</button>
+          </div>
+        </app-action-modal>
+      }
     </div>
   `,
   styles: `
@@ -43,6 +58,11 @@ import { Router } from '@angular/router';
     p { margin: 0; color: var(--color-green); } p.error { color: var(--color-red); }
     .logout-card p { margin-top: 6px; color: var(--color-text-secondary); }
     button.logout { background: rgb(255 77 109 / .14); color: var(--color-red); }
+    .confirmation-copy { color: var(--color-text-secondary); line-height: 1.5; }
+    .logout-error { margin-top: 14px; color: var(--color-red); }
+    .confirmation-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+    button.secondary { border: 1px solid var(--color-border); background: var(--color-card-secondary); color: var(--color-text); }
+    @media (max-width: 360px) { .confirmation-actions { grid-template-columns: 1fr; } }
   `,
 })
 export class SettingsPage {
@@ -56,6 +76,8 @@ export class SettingsPage {
   protected readonly message = signal('');
   protected readonly hasError = signal(false);
   protected readonly loggingOut = signal(false);
+  protected readonly confirmingLogout = signal(false);
+  protected readonly logoutError = signal('');
   protected readonly budgetOptions: { value: BudgetMode; label: string }[] = [
     { value: 'adjusted', label: 'Ajustado' }, { value: 'flexible', label: 'Flexible' },
     { value: 'debt_aggressive', label: 'Pagar deuda' }, { value: 'saving_aggressive', label: 'Ahorrar' },
@@ -86,11 +108,28 @@ export class SettingsPage {
     });
   }
 
-  protected async logout() {
+  protected requestLogout() {
+    this.logoutError.set('');
+    this.confirmingLogout.set(true);
+  }
+
+  protected cancelLogout() {
+    if (!this.loggingOut()) this.confirmingLogout.set(false);
+  }
+
+  protected async confirmLogout() {
     if (this.loggingOut()) return;
     this.loggingOut.set(true);
-    try { await this.auth.logout(); } catch {}
-    finally { this.onboarding.reset(); await this.router.navigateByUrl('/login'); this.loggingOut.set(false); }
+    this.logoutError.set('');
+    try {
+      await this.auth.logout();
+      this.onboarding.reset();
+      await this.router.navigateByUrl('/login');
+    } catch {
+      this.logoutError.set('No se pudo cerrar la sesión. Intenta de nuevo.');
+    } finally {
+      this.loggingOut.set(false);
+    }
   }
 
   private showMessage(message: string, error = false) { this.message.set(message); this.hasError.set(error); }
