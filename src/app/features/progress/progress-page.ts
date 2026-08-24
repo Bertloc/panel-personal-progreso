@@ -45,8 +45,9 @@ const TODAY = isoDate(new Date());
         </section>
       } @else {
         <section class="surface-card progress-hero">
-          <div>
-            <p class="card-label">Nivel promedio · {{ periodLabel() }}</p>
+          <div class="metric-block">
+            <p class="card-label">Nivel promedio</p>
+            <p class="metric-period">{{ periodLabel() }}</p>
             @if (currentDays().length) {
               <strong class="average">{{ formatLevel(averageLevel() ?? 0) }}<small>/4</small></strong>
               <p class="section-card-copy">Promedio de los días con registro en este periodo.</p>
@@ -124,35 +125,38 @@ const TODAY = isoDate(new Date());
     .state { margin: 0; text-align: center; color: var(--color-text-secondary); }
     .state p { margin: 0; }
     .state--error { display: grid; justify-items: center; gap: 12px; color: var(--color-red); }
-    .progress-hero { display: grid; gap: 20px; background: radial-gradient(circle at top right, rgb(124 109 255 / .14), transparent 46%), var(--color-card); }
-    .average { display: block; margin: 8px 0; color: var(--color-green); font-size: clamp(3rem, 14vw, 4.6rem); line-height: .9; letter-spacing: -.07em; }
-    .average small { margin-left: 5px; color: var(--color-text-secondary); font-size: 1rem; letter-spacing: 0; }
+    .progress-hero { display: grid; justify-items: center; gap: 20px; padding: clamp(22px, 7vw, 32px); text-align: center; background: radial-gradient(circle at top right, rgb(124 109 255 / .14), transparent 46%), var(--color-card); }
+    .metric-block { width: 100%; max-width: 32rem; }
+    .metric-period { margin: 5px 0 0; color: var(--color-text-secondary); font-size: .86rem; font-weight: 700; text-transform: capitalize; }
+    .average { display: flex; align-items: baseline; justify-content: center; margin: 22px 0 14px; color: var(--color-green); font-size: clamp(3.5rem, 18vw, 5rem); line-height: .82; letter-spacing: -.07em; }
+    .average small { margin-left: 7px; color: var(--color-text-secondary); font-size: 1.15rem; letter-spacing: 0; }
     .trend { display: grid; gap: 3px; padding: 12px 14px; border-radius: 14px; background: rgb(124 109 255 / .12); color: var(--color-purple); }
     .trend span, .history-note { color: var(--color-text-secondary); font-size: .8rem; }
     .trend--up { background: rgb(40 215 154 / .12); color: var(--color-green); }
     .trend--down { background: rgb(255 77 109 / .12); color: var(--color-red); }
+    .trend, .history-note { width: 100%; max-width: 32rem; }
     .history-note { margin: 0; }
-    .consistency-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .consistency-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
     .consistency-grid article { min-width: 0; padding: 14px 8px; text-align: center; }
     .consistency-grid span { display: block; min-height: 2.2em; color: var(--color-text-secondary); font-size: .68rem; line-height: 1.1; }
     .consistency-grid strong { display: block; margin-top: 6px; font-size: 1rem; }
     .heatmap-card, .history-card { display: grid; gap: 20px; padding: 16px; }
     .months { display: grid; grid-template-columns: 1fr; gap: 20px 14px; }
+    .month { width: min(100%, 30rem); margin-inline: auto; }
     .month h3 { margin: 0 0 8px; color: var(--color-text-secondary); font-size: .85rem; text-transform: capitalize; }
-    .weekdays, .month-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+    .weekdays, .month-grid { display: grid; grid-template-columns: repeat(7, minmax(28px, 1fr)); gap: 4px; }
     .weekdays { margin-bottom: 5px; color: var(--color-muted); text-align: center; font-size: .6rem; }
     .month-grid > * { width: 100%; aspect-ratio: 1; border-radius: 3px; }
     .heatmap-cell--missing { background: transparent; box-shadow: inset 0 0 0 1px var(--color-border); }
     .heatmap-cell--future { background: repeating-linear-gradient(135deg, transparent, transparent 3px, rgb(255 255 255 / .05) 3px, rgb(255 255 255 / .05) 5px); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .06); }
-    .legend { display: flex; flex-wrap: wrap; gap: 9px 14px; padding-top: 16px; border-top: 1px solid var(--color-border); color: var(--color-text-secondary); font-size: .72rem; }
-    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 16px; padding-top: 18px; border-top: 1px solid var(--color-border); color: var(--color-text-secondary); font-size: .72rem; }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
     .legend i { width: 12px; height: 12px; border-radius: 3px; }
     .history-list { display: grid; }
     .history-list div { display: flex; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--color-border); }
     .history-list div:last-child { border-bottom: 0; }
     .history-list span { color: var(--color-text-secondary); }
     .history-list strong { text-align: right; }
-    @media (min-width: 700px) { .months { grid-template-columns: repeat(3, 1fr); } .progress-hero { grid-template-columns: minmax(0, 1fr) minmax(220px, .65fr); align-items: end; } }
   `,
 })
 export class ProgressPage {
