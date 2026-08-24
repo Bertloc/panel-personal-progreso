@@ -3,7 +3,7 @@ import { inject, Injectable } from '@angular/core';
 import { map } from 'rxjs';
 import { API_BASE_URL } from '../config/api.config';
 import { ApiResponse, unwrapApiResponse } from '../models/api.model';
-import { HeatmapApiDay, HeatmapApiResponse, ProgressDayDetail, ProgressFilter, ProgressHeatmapDay, ProgressHeatmapResponse, ProgressSummaryResponse, ProgressTodayApi, RecalculateProgressPayload } from '../models/progress.model';
+import { HeatmapApiDay, HeatmapApiResponse, ProgressFilter, ProgressHeatmapDay, ProgressHeatmapResponse, ProgressTodayApi, RecalculateProgressPayload } from '../models/progress.model';
 import { toNumber } from '../utils/number.util';
 
 const LEGEND = ['Sin datos', 'Bajo', 'Regular', 'Bien', 'Excelente'];
@@ -22,12 +22,6 @@ export class ProgressApiService {
       map((response) => normalizeHeatmap(response, filter, year)),
     );
   }
-  getSummary(period: ProgressSummaryResponse['period'], date?: string) {
-    let params = new HttpParams().set('period', period);
-    if (date) params = params.set('date', date);
-    return this.http.get<ApiResponse<ProgressSummaryResponse>>(`${this.url}/summary`, { params }).pipe(map(unwrapApiResponse));
-  }
-  getDayDetail(date: string) { return this.http.get<ApiResponse<ProgressDayDetail>>(`${this.url}/day/${encodeURIComponent(date)}`).pipe(map(unwrapApiResponse)); }
   recalculateProgress(payload: RecalculateProgressPayload) { return this.http.post<ProgressTodayApi>(`${this.url}/recalculate`, payload); }
 }
 

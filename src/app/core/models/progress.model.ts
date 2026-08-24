@@ -34,27 +34,6 @@ export interface ProgressHeatmapResponse {
   };
 }
 
-export interface ProgressSummaryResponse {
-  period: 'week' | 'month' | 'year';
-  startDate: string;
-  endDate: string;
-  general?: unknown;
-  money?: unknown;
-  routine?: unknown;
-  debt?: unknown;
-  saving?: unknown;
-}
-
-export interface ProgressDayDetail {
-  date: string;
-  general: number;
-  money?: unknown;
-  routine?: unknown;
-  debt?: unknown;
-  saving?: unknown;
-  projects?: unknown;
-}
-
 export interface HeatmapApiDay {
   id?: string;
   date?: string;

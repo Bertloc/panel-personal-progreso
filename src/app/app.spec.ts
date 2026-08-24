@@ -2,7 +2,7 @@ import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { App } from './app';
-import { getHeatmapValueFromDay } from './core/utils/heatmap.util';
+import { groupProgressDaysByMonth, getHeatmapValueFromDay, progressPeriodRange, progressTrend } from './core/utils/heatmap.util';
 import { HomePage } from './features/home/home-page';
 import { AppCurrencyPipe } from './shared/pipes/app-currency.pipe';
 import { HttpRequest, HttpResponse, provideHttpClient } from '@angular/common/http';
@@ -510,6 +510,31 @@ describe('App', () => {
     });
 
     expect(result).toEqual({ activeDays: 1, filter: 'routine' });
+  });
+
+  it('should keep progress periods separate and calendar aligned', () => {
+    expect(progressPeriodRange('week', '2026-08-19')).toEqual({ start: '2026-08-17', end: '2026-08-23' });
+    expect(progressPeriodRange('month', '2026-08-19')).toEqual({ start: '2026-08-01', end: '2026-08-31' });
+    expect(progressPeriodRange('year', '2026-08-19')).toEqual({ start: '2026-01-01', end: '2026-12-31' });
+  });
+
+  it('should compare only periods with enough real history', () => {
+    const day = (date: string, value: number) => ({ date, value, level: value, status: value === 4 ? 'excellent' as const : 'ok' as const });
+    expect(progressTrend([day('2026-08-18', 3), day('2026-08-19', 4)], [day('2026-08-11', 2), day('2026-08-12', 3)])).toEqual({ difference: 1, label: 'Mejorando' });
+    expect(progressTrend([day('2026-08-19', 4)], [day('2026-08-12', 3)])).toBeNull();
+  });
+
+  it('should distinguish missing progress from future calendar days', () => {
+    const months = groupProgressDaysByMonth(
+      [{ date: '2026-08-22', value: 2, level: 2, status: 'ok' }],
+      { start: '2026-08-22', end: '2026-08-24' },
+      '2026-08-23',
+    );
+    const days = months.flatMap(({ slots }) => slots).filter((day) => day !== null);
+
+    expect(days.find(({ date }) => date === '2026-08-22')).toMatchObject({ future: false, progress: { level: 2 } });
+    expect(days.find(({ date }) => date === '2026-08-23')).toMatchObject({ future: false, progress: null });
+    expect(days.find(({ date }) => date === '2026-08-24')).toMatchObject({ future: true, progress: null });
   });
 
   it('should derive category color and badge from priority', () => {
