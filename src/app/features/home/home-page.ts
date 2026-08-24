@@ -21,6 +21,7 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
   template: `
     <div class="page-stack">
       <header class="page-header">
+        <a class="settings-link" routerLink="/settings" aria-label="Configuración"><span aria-hidden="true">⚙</span></a>
         <p class="page-eyebrow">{{ homeSummary.date || today }}</p>
         <h1 class="page-title">Buenos días, {{ homeSummary.userName || profileName }}</h1>
         <p class="page-copy">Tu centro de control personal para hoy.</p>
@@ -105,6 +106,9 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
     </div>
   `,
   styles: `
+    .page-header { position: relative; padding-right: 56px; }
+    .settings-link { position: absolute; top: 0; right: 0; display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid var(--color-border); border-radius: 14px; background: var(--color-card-secondary); color: var(--color-text-secondary); font-size: 1.25rem; text-decoration: none; }
+    .settings-link:hover, .settings-link:focus-visible { border-color: var(--color-green); color: var(--color-green); }
     .hero-card { padding: 22px; background: radial-gradient(circle at top right, rgb(40 215 154 / .14), transparent 42%), var(--color-card); border-color: rgb(40 215 154 / .28); }
     .card-label, .card-meta { margin: 0; color: var(--color-text-secondary); }
     .hero-amount { display: block; margin-top: 8px; font-size: clamp(3.1rem, 14vw, 4.5rem); line-height: .92; letter-spacing: -.08em; color: var(--color-green); }

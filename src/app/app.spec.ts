@@ -304,6 +304,18 @@ describe('App', () => {
     expect(text).not.toContain('$10,000');
   });
 
+  it('should expose Settings from the Home header', () => {
+    const fixture = TestBed.createComponent(HomePage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(apiUrl('/dashboard/summary')).flush({});
+    flushHomeSecondary(http);
+    fixture.detectChanges();
+
+    const settingsLink: HTMLAnchorElement = fixture.nativeElement.querySelector('.page-header .settings-link');
+    expect(settingsLink.getAttribute('aria-label')).toBe('Configuración');
+    expect(settingsLink.getAttribute('href')).toBe('/settings');
+  });
+
   it('should show an honest empty state when there is no monthly budget', () => {
     const fixture = TestBed.createComponent(HomePage);
     const http = TestBed.inject(HttpTestingController);
