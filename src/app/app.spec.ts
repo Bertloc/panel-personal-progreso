@@ -69,7 +69,10 @@ describe('App', () => {
     fixture.detectChanges();
 
     const logoutButton: HTMLButtonElement = fixture.nativeElement.querySelector('.logout-card .logout');
+    const backLink: HTMLAnchorElement = fixture.nativeElement.querySelector('.back');
     expect(fixture.nativeElement.textContent).toContain('Cuenta');
+    expect(backLink.textContent?.trim()).toBe('← Volver');
+    expect(backLink.getAttribute('href')).toBe('/');
     expect(logoutButton.textContent?.trim()).toBe('Cerrar sesión');
     logoutButton.click();
     fixture.detectChanges();
@@ -160,6 +163,16 @@ describe('App', () => {
     expect(mainButton.getAttribute('aria-expanded')).toBe('false');
     expect(fixture.nativeElement.querySelector('.backdrop')).toBeNull();
     expect(getComputedStyle(actions).pointerEvents).toBe('none');
+  });
+
+  it('should hide only the floating action button in Settings', () => {
+    const router = TestBed.inject(Router);
+    vi.spyOn(router, 'url', 'get').mockReturnValue('/settings');
+    const fixture = TestBed.createComponent(App);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('app-floating-action-button')).toBeNull();
+    expect(fixture.nativeElement.querySelector('app-bottom-nav')).not.toBeNull();
   });
 
   it('should send a valid expense through the existing money endpoint', () => {

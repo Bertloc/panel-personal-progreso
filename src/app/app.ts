@@ -1,4 +1,4 @@
-import { Component, effect, inject } from '@angular/core';
+import { Component, computed, effect, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter, map, startWith } from 'rxjs';
@@ -15,11 +15,13 @@ import { AuthService } from './core/services/auth.service';
 export class App {
   private readonly router = inject(Router);
   protected readonly auth = inject(AuthService);
-  protected readonly showChrome = toSignal(this.router.events.pipe(
+  private readonly currentUrl = toSignal(this.router.events.pipe(
     filter((event): event is NavigationEnd => event instanceof NavigationEnd),
-    map((event) => !isAuthRoute(event.urlAfterRedirects)),
-    startWith(!isAuthRoute(this.router.url)),
+    map((event) => event.urlAfterRedirects),
+    startWith(this.router.url),
   ), { requireSync: true });
+  protected readonly showChrome = computed(() => !isAuthRoute(this.currentUrl()));
+  protected readonly showFab = computed(() => this.currentUrl().split(/[?#]/, 1)[0] !== '/settings');
 
   constructor() {
     effect(() => { if (!this.auth.loading() && !this.auth.isAuthenticated() && !isAuthRoute(this.router.url)) void this.router.navigateByUrl('/login'); });

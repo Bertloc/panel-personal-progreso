@@ -6,14 +6,15 @@ import { ProfileApiService } from '../../core/services/profile-api.service';
 import { SettingsApiService } from '../../core/services/settings-api.service';
 import { AuthService } from '../../core/services/auth.service';
 import { OnboardingStateService } from '../../core/services/onboarding-state.service';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { ActionModal } from '../../shared/components/action-modal/action-modal';
 
 @Component({
   selector: 'app-settings-page',
-  imports: [ReactiveFormsModule, ActionModal],
+  imports: [ReactiveFormsModule, RouterLink, ActionModal],
   template: `
     <div class="page-stack">
+      <a class="back" routerLink="/">← Volver</a>
       <header class="page-header">
         <p class="page-eyebrow">Tu cuenta</p><h1 class="page-title">Ajustes</h1>
         <p class="page-copy">Actualiza tu perfil y estilo de presupuesto.</p>
@@ -50,13 +51,18 @@ import { ActionModal } from '../../shared/components/action-modal/action-modal';
     </div>
   `,
   styles: `
+    .back { display: inline-flex; align-items: center; width: fit-content; min-height: 44px; padding-inline: 4px; color: #b8beff; text-decoration: none; font-weight: 700; }
+    .page-header { padding: 2px 2px 8px; }
+    .page-copy { margin-top: 12px; }
     form, label, .logout-card { display: grid; gap: 14px; }
+    form { gap: 18px; padding: 22px; }
     label { gap: 8px; color: var(--color-text-secondary); font-weight: 650; }
-    input, select { min-height: 48px; padding: 12px 14px; border: 1px solid var(--color-border); border-radius: 14px; background: #0c0f15; color: var(--color-text); font: inherit; }
+    input, select { width: 100%; min-width: 0; min-height: 48px; padding: 12px 14px; border: 1px solid var(--color-border); border-radius: 14px; background: #0c0f15; color: var(--color-text); font: inherit; }
     button { min-height: 48px; border: 0; border-radius: 14px; background: var(--color-green); color: #04120a; font-weight: 800; }
     button:disabled { opacity: .45; }
     p { margin: 0; color: var(--color-green); } p.error { color: var(--color-red); }
-    .logout-card p { margin-top: 6px; color: var(--color-text-secondary); }
+    .logout-card { gap: 18px; margin-top: 4px; padding: 22px; border-color: rgb(255 77 109 / .24); background: linear-gradient(180deg, rgb(255 77 109 / .06), var(--color-card)); }
+    .logout-card p { margin-top: 8px; color: var(--color-text-secondary); }
     button.logout { background: rgb(255 77 109 / .14); color: var(--color-red); }
     .confirmation-copy { color: var(--color-text-secondary); line-height: 1.5; }
     .logout-error { margin-top: 14px; color: var(--color-red); }

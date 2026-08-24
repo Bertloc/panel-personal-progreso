@@ -4,7 +4,7 @@
   </main>
 
   @if (showChrome() && !auth.loading()) {
-    <app-floating-action-button />
+    @if (showFab()) { <app-floating-action-button /> }
     <app-bottom-nav />
   }
 </div>
