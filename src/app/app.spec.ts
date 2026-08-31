@@ -33,6 +33,8 @@ import { authGuard } from './core/guards/auth.guard';
 import { routes } from './app.routes';
 import { vi } from 'vitest';
 import { By } from '@angular/platform-browser';
+import { RecurringPaymentsManager } from './features/money/setup/recurring-payments-manager';
+import { monthlyDateForDay, monthlyDayFromDate } from './core/utils/monthly-payment-date.util';
 
 let accessToken: string | null = null;
 const authStub = {
@@ -238,30 +240,28 @@ describe('App', () => {
     const http = TestBed.inject(HttpTestingController);
     const form = fixture.componentInstance['form'];
 
-    form.patchValue({ name: '', initialAmount: null as never, currentAmount: null as never, minimumPayment: null as never, paymentDay: null });
+    form.patchValue({ name: '', initialAmount: null as never, currentAmount: null as never, minimumPayment: null as never, paymentDate: '' });
     fixture.componentInstance['save']();
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('El nombre es obligatorio.');
     expect(fixture.nativeElement.textContent).toContain('El monto inicial es obligatorio.');
     expect(fixture.nativeElement.textContent).toContain('El monto actual es obligatorio.');
     expect(fixture.nativeElement.textContent).toContain('El pago mínimo es obligatorio.');
-    expect(fixture.nativeElement.textContent).toContain('El día de pago es obligatorio.');
+    expect(fixture.nativeElement.textContent).toContain('La fecha de pago es obligatoria.');
 
-    form.patchValue({ name: 'Tarjeta', initialAmount: 100, currentAmount: 200, minimumPayment: 0, paymentDay: 32 });
+    form.patchValue({ name: 'Tarjeta', initialAmount: 100, currentAmount: 200, minimumPayment: 0, paymentDate: '2026-09-15' });
     fixture.componentInstance['save']();
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('El monto actual no puede ser mayor que el monto inicial.');
     expect(fixture.nativeElement.textContent).toContain('El pago mínimo debe ser mayor que 0.');
-    expect(fixture.nativeElement.textContent).toContain('El día de pago debe estar entre 1 y 31.');
-    expect(form.controls.paymentDay.hasError('max')).toBe(true);
     http.expectNone(apiUrl('/debts'));
 
-    form.patchValue({ currentAmount: 50, minimumPayment: 10, paymentDay: 0 });
+    form.patchValue({ currentAmount: 50, minimumPayment: 10, paymentDate: 'not-a-date' });
     fixture.componentInstance['save']();
-    expect(form.controls.paymentDay.hasError('min')).toBe(true);
+    expect(form.controls.paymentDate.hasError('monthlyPaymentDate')).toBe(true);
     http.expectNone(apiUrl('/debts'));
 
-    form.patchValue({ initialAmount: 10000.001, currentAmount: 8500.001, minimumPayment: 500.001, paymentDay: 15 });
+    form.patchValue({ initialAmount: 10000.001, currentAmount: 8500.001, minimumPayment: 500.001, paymentDate: '2026-09-15' });
     fixture.componentInstance['save']();
     expect(form.controls.initialAmount.hasError('currencyAmount')).toBe(true);
     expect(form.controls.currentAmount.hasError('currencyAmount')).toBe(true);
@@ -273,16 +273,16 @@ describe('App', () => {
     expect(form.controls.initialAmount.hasError('max')).toBe(true);
     http.expectNone(apiUrl('/debts'));
 
-    form.patchValue({ initialAmount: 10000.55, currentAmount: 8500.25, minimumPayment: 500.1, paymentDay: 15 });
+    form.patchValue({ initialAmount: 10000.55, currentAmount: 8500.25, minimumPayment: 500.1, paymentDate: '2026-09-15' });
     expect(form.valid).toBe(true);
 
-    form.patchValue({ name: 'Tarjeta', initialAmount: 10000, currentAmount: 10000, minimumPayment: 500, paymentDay: 15, strategy: 'light', priority: 'high' });
+    form.patchValue({ name: 'Tarjeta', initialAmount: 10000, currentAmount: 10000, minimumPayment: 500, paymentDate: '2026-09-15', strategy: 'light', priority: 'high' });
     fixture.componentInstance['save']();
     const fullBalanceRequest = http.expectOne(apiUrl('/debts'));
     expect(fullBalanceRequest.request.body).toMatchObject({ initialAmount: 10000, currentAmount: 10000, minimumPayment: 500, paymentDay: 15 });
     fullBalanceRequest.flush({ id: 'debt-1', name: 'Tarjeta' });
 
-    form.patchValue({ name: 'Tarjeta', initialAmount: 10000, currentAmount: 8500, minimumPayment: 500, paymentDay: 15, strategy: 'light', priority: 'high' });
+    form.patchValue({ name: 'Tarjeta', initialAmount: 10000, currentAmount: 8500, minimumPayment: 500, paymentDate: '2026-09-15', strategy: 'light', priority: 'high' });
     fixture.componentInstance['save']();
     const request = http.expectOne(apiUrl('/debts'));
     expect(request.request.method).toBe('POST');
@@ -290,8 +290,9 @@ describe('App', () => {
     request.flush({ id: 'debt-1', name: 'Tarjeta' });
     http.expectNone(apiUrl('/debts'));
 
-    const dayOptions = Array.from<HTMLOptionElement>(fixture.nativeElement.querySelectorAll('select[formcontrolname="paymentDay"] option:not([disabled])'));
-    expect(dayOptions.map((option) => Number(option.textContent))).toEqual(Array.from({ length: 31 }, (_, index) => index + 1));
+    const paymentDate: HTMLInputElement = fixture.nativeElement.querySelector('input[formcontrolname="paymentDate"]');
+    expect(paymentDate.type).toBe('date');
+    expect(fixture.nativeElement.textContent).toContain('Se considerará el día 15 de cada mes.');
   });
 
   it('should translate known debt validation responses from the backend', () => {
@@ -299,7 +300,7 @@ describe('App', () => {
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
     http.expectOne(apiUrl('/debts')).flush([]);
-    fixture.componentInstance['form'].patchValue({ name: 'Tarjeta', initialAmount: 100, currentAmount: 50, minimumPayment: 10, paymentDay: 15 });
+    fixture.componentInstance['form'].patchValue({ name: 'Tarjeta', initialAmount: 100, currentAmount: 50, minimumPayment: 10, paymentDate: '2026-09-15' });
     fixture.componentInstance['save']();
     http.expectOne(apiUrl('/debts')).flush({ message: 'currentAmount must not be greater than initialAmount' }, { status: 400, statusText: 'Bad Request' });
     fixture.detectChanges();
@@ -539,6 +540,55 @@ describe('App', () => {
     request.flush({ id: 'gym', name: 'Gym', amount: 450, frequency: 'monthly', isFixed: true, isActive: true });
   });
 
+  it('should convert recurring payment dates to monthly days and preserve them when editing', () => {
+    const fixture = TestBed.createComponent(RecurringPaymentsManager);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(apiUrl('/recurring-payments')).flush([]);
+    http.expectOne(apiUrl('/money/categories')).flush([]);
+    const manager = fixture.componentInstance;
+    manager['form'].patchValue({ name: 'Internet', amount: 600, frequency: 'monthly', paymentDate: '2026-09-08' });
+    manager['save']();
+
+    const create = http.expectOne(apiUrl('/recurring-payments'));
+    expect(create.request.method).toBe('POST');
+    expect(create.request.body).toMatchObject({ frequency: 'monthly', dueDay: 8 });
+    expect(create.request.body.paymentDate).toBeUndefined();
+    const payment = { id: 'internet', name: 'Internet', amount: 600, frequency: 'monthly' as const, dueDay: 8, isFixed: true, isActive: true };
+    create.flush(payment);
+    http.expectOne(apiUrl('/recurring-payments')).flush([payment]);
+    http.expectOne(apiUrl('/money/categories')).flush([]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Mensual · día 8');
+
+    const edit = Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Editar')!;
+    edit.click();
+    fixture.detectChanges();
+    expect(manager['form'].controls.paymentDate.value.slice(8, 10)).toBe('08');
+    manager['form'].patchValue({ paymentDate: '2026-09-20' });
+    manager['save']();
+    const update = http.expectOne(apiUrl('/recurring-payments/internet'));
+    expect(update.request.method).toBe('PATCH');
+    expect(update.request.body).toMatchObject({ frequency: 'monthly', dueDay: 20 });
+    update.flush({ ...payment, dueDay: 20 });
+    http.expectOne(apiUrl('/recurring-payments')).flush([{ ...payment, dueDay: 20 }]);
+    http.expectOne(apiUrl('/money/categories')).flush([]);
+
+    manager['form'].patchValue({ name: 'Seguro', amount: 300, frequency: 'weekly', nextDueDate: '2026-09-10' });
+    manager['save']();
+    const weekly = http.expectOne(apiUrl('/recurring-payments'));
+    expect(weekly.request.body).toMatchObject({ frequency: 'weekly', nextDueDate: '2026-09-10' });
+    expect(weekly.request.body.dueDay).toBeUndefined();
+    weekly.flush({ id: 'seguro', name: 'Seguro', amount: 300, frequency: 'weekly', nextDueDate: '2026-09-10', isFixed: true, isActive: true });
+    http.expectOne(apiUrl('/recurring-payments')).flush([]);
+    http.expectOne(apiUrl('/money/categories')).flush([]);
+  });
+
+  it('should derive days 28 through 31 without parsing calendar dates as timestamps', () => {
+    for (const day of [28, 29, 30, 31]) expect(monthlyDayFromDate(`2026-10-${day}`)).toBe(day);
+    expect(monthlyDateForDay(15, new Date(2026, 8, 1))).toBe('2026-09-15');
+    expect(monthlyDateForDay(31, new Date(2026, 1, 1))).toBe('2026-03-31');
+  });
+
   it('should render money tabs and open their contextual actions without setup links', () => {
     const fixture = TestBed.createComponent(MoneyPage);
     const http = TestBed.inject(HttpTestingController);
@@ -564,19 +614,22 @@ describe('App', () => {
     button('Editar').click();
     fixture.detectChanges();
     const manager = fixture.debugElement.query(By.directive(DebtsManager)).componentInstance as DebtsManager;
-    expect(manager['form'].getRawValue()).toMatchObject({ name: 'Tarjeta', initialAmount: 1000, currentAmount: 600, minimumPayment: 100, paymentDay: 15, strategy: 'aggressive', priority: 'high' });
+    expect(manager['form'].getRawValue()).toMatchObject({ name: 'Tarjeta', initialAmount: 1000, currentAmount: 600, minimumPayment: 100, strategy: 'aggressive', priority: 'high' });
+    expect(manager['form'].controls.paymentDate.value.slice(8, 10)).toBe('15');
     http.expectNone(apiUrl('/debts'));
-    manager['form'].patchValue({ minimumPayment: 250 });
+    manager['form'].patchValue({ minimumPayment: 250, paymentDate: '2026-09-22' });
     manager['save']();
     const update = http.expectOne(apiUrl('/debts/debt-1'));
     expect(update.request.method).toBe('PATCH');
-    expect(update.request.body).toMatchObject({ minimumPayment: 250, paymentDay: 15 });
+    expect(update.request.body).toMatchObject({ minimumPayment: 250, paymentDay: 22 });
+    expect(update.request.body.paymentDate).toBeUndefined();
     expect(update.request.body.status).toBeUndefined();
-    update.flush({ ...debt, minimumPayment: 250 });
+    const updatedDebt = { ...debt, minimumPayment: 250, paymentDay: 22 };
+    update.flush(updatedDebt);
     http.expectOne(apiUrl('/money/categories')).flush([]);
     http.expectOne(apiUrl('/money/expenses')).flush([]);
     http.expectOne(apiUrl('/budgets/current')).flush({ current: null, limits: [], summary: null });
-    http.expectOne(apiUrl('/debts')).flush([{ ...debt, minimumPayment: 250 }]);
+    http.expectOne(apiUrl('/debts')).flush([updatedDebt]);
     http.expectOne(apiUrl('/savings/goals')).flush([{ id: 'goal-1', name: 'Viaje', currentAmount: 300, targetAmount: 1000, status: 'active' }]);
     http.expectOne(apiUrl('/settings')).flush({});
     http.expectOne(apiUrl('/income/sources')).flush([]);
@@ -585,6 +638,7 @@ describe('App', () => {
     expect(fixture.componentInstance['activeTab']()).toBe('debt');
     expect(fixture.nativeElement.querySelector('app-debts-manager')).toBeNull();
     expect(fixture.nativeElement.textContent).toContain('$250');
+    expect(fixture.nativeElement.textContent).toContain('día 22');
 
     button('＋ Agregar').click();
     fixture.detectChanges();

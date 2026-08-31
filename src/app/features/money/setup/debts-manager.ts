@@ -6,6 +6,7 @@ import { DebtApi, DebtPriority, DebtStrategy } from '../../../core/models/debts.
 import { DebtsApiService } from '../../../core/services/debts-api.service';
 import { QuickCreateEventsService } from '../../../core/services/quick-create-events.service';
 import { debtPriorityLabel, debtStrategyLabel, roundedPercent } from '../../../core/utils/money-display.util';
+import { monthlyDateForDay, monthlyDayFromDate } from '../../../core/utils/monthly-payment-date.util';
 import { AppCurrencyPipe } from '../../../shared/pipes/app-currency.pipe';
 
 @Component({
@@ -31,9 +32,10 @@ import { AppCurrencyPipe } from '../../../shared/pipes/app-currency.pipe';
             @else if (form.controls.minimumPayment.touched && form.controls.minimumPayment.hasError('min')) { <span class="field-error">El pago mínimo debe ser mayor que 0.</span> }
             @else if (form.controls.minimumPayment.touched && form.controls.minimumPayment.invalid) { <span class="field-error">Ingresa un pago mínimo entre 0.01 y 9,999,999,999.99, con máximo 2 decimales.</span> }
           </label>
-          <label>Día de pago * <select formControlName="paymentDay"><option [ngValue]="null" disabled>Selecciona un día</option>@for (day of paymentDays; track day) { <option [ngValue]="day">{{ day }}</option> }</select>
-            @if (form.controls.paymentDay.touched && form.controls.paymentDay.hasError('required')) { <span class="field-error">El día de pago es obligatorio.</span> }
-            @else if (form.controls.paymentDay.touched && form.controls.paymentDay.invalid) { <span class="field-error">El día de pago debe estar entre 1 y 31.</span> }
+          <label>Fecha de pago * <input formControlName="paymentDate" type="date" />
+            @if (form.controls.paymentDate.touched && form.controls.paymentDate.hasError('required')) { <span class="field-error">La fecha de pago es obligatoria.</span> }
+            @else if (form.controls.paymentDate.touched && form.controls.paymentDate.invalid) { <span class="field-error">Selecciona una fecha de pago válida.</span> }
+            @if (selectedPaymentDay(); as day) { <span class="field-help">Se considerará el día {{ day }} de cada mes.</span>@if (day >= 29) { <span class="field-help">Si un mes no tiene día {{ day }}, se usará su último día.</span> } }
           </label>
           <label>Estrategia <select formControlName="strategy">@for (strategy of strategies; track strategy) { <option [value]="strategy">{{ debtStrategyLabel(strategy) }}</option> }</select></label>
           <label>Prioridad <select formControlName="priority">@for (priority of priorities; track priority) { <option [value]="priority">{{ debtPriorityLabel(priority) }}</option> }</select></label>
@@ -53,7 +55,7 @@ import { AppCurrencyPipe } from '../../../shared/pipes/app-currency.pipe';
     </div>
   `,
   styleUrl: './setup-manager.css',
-  styles: `.field-error { color: var(--color-red); font-size: .78rem; }`,
+  styles: `.field-error { color: var(--color-red); font-size: .78rem; } .field-help { color: var(--color-text-secondary); font-size: .78rem; font-weight: 500; line-height: 1.4; }`,
 })
 export class DebtsManager implements OnInit {
   readonly contextual = input(false);
@@ -63,28 +65,29 @@ export class DebtsManager implements OnInit {
   protected readonly debts = signal<DebtApi[]>([]); protected readonly loading = signal(true); protected readonly saving = signal(false); protected readonly error = signal(''); protected readonly editingId = signal<string | null>(null);
   protected readonly strategies: DebtStrategy[] = ['bank_plan', 'light', 'aggressive', 'custom'];
   protected readonly priorities: DebtPriority[] = ['low', 'medium', 'high', 'urgent'];
-  protected readonly paymentDays = Array.from({ length: 31 }, (_, index) => index + 1);
   protected readonly debtStrategyLabel = debtStrategyLabel;
   protected readonly debtPriorityLabel = debtPriorityLabel;
   protected readonly roundedPercent = roundedPercent;
   protected readonly form = this.fb.nonNullable.group({
     name: ['', Validators.required], initialAmount: [0, [Validators.required, Validators.min(.01), Validators.max(MAX_DEBT_AMOUNT), currencyAmount]], currentAmount: [0, [Validators.required, Validators.min(0), Validators.max(MAX_DEBT_AMOUNT), currencyAmount]],
-    minimumPayment: [0, [Validators.required, Validators.min(.01), Validators.max(MAX_DEBT_AMOUNT), currencyAmount]], paymentDay: this.fb.control<number | null>(null, [Validators.required, Validators.min(1), Validators.max(31)]),
+    minimumPayment: [0, [Validators.required, Validators.min(.01), Validators.max(MAX_DEBT_AMOUNT), currencyAmount]], paymentDate: ['', [Validators.required, monthlyPaymentDate]],
     strategy: this.fb.nonNullable.control<DebtStrategy>('bank_plan', Validators.required), priority: this.fb.nonNullable.control<DebtPriority>('medium', Validators.required), notes: '',
   }, { validators: currentNotGreaterThanInitial });
   ngOnInit() { const debt = this.initialDebt(); if (debt) this.edit(debt); if (this.contextual()) this.loading.set(false); else this.load(); }
   protected currentAmount(debt: DebtApi) { return Number(debt.currentAmount ?? debt.remainingAmount ?? debt.balance ?? 0); }
   protected minimumPayment(debt: DebtApi) { return Number(debt.minimumPayment ?? 0); }
+  protected selectedPaymentDay() { return monthlyDayFromDate(this.form.controls.paymentDate.value); }
   protected save() {
     if (this.saving()) return;
     if (this.form.invalid) { this.form.markAllAsTouched(); return; }
     const value = this.form.getRawValue(); const id = this.editingId();
-    const payload = { ...value, paymentDay: value.paymentDay as number, notes: value.notes || null, ...(id ? {} : { status: 'active' }) };
+    const { paymentDate, ...fields } = value;
+    const payload = { ...fields, paymentDay: monthlyDayFromDate(paymentDate) as number, notes: value.notes || null, ...(id ? {} : { status: 'active' }) };
     this.saving.set(true); this.error.set('');
     (id ? this.api.updateDebt(id, payload) : this.api.createDebt(payload)).pipe(finalize(() => this.saving.set(false))).subscribe({ next: () => { this.reset(); this.events.notifyMoneyChanged(); this.saved.emit(); if (!this.contextual()) this.load(); }, error: (error: unknown) => this.error.set(debtSaveError(error)) });
   }
-  protected edit(debt: DebtApi) { this.editingId.set(debt.id); this.form.patchValue({ name: debt.name ?? '', initialAmount: Number(debt.initialAmount ?? debt.originalAmount ?? debt.totalAmount ?? 0), currentAmount: this.currentAmount(debt), minimumPayment: Number(debt.minimumPayment ?? 0), paymentDay: debt.paymentDay ?? null, strategy: debt.strategy ?? 'bank_plan', priority: debt.priority ?? 'medium', notes: debt.notes ?? '' }); }
-  protected reset() { this.editingId.set(null); this.form.reset({ name: '', initialAmount: 0, currentAmount: 0, minimumPayment: 0, paymentDay: null, strategy: 'bank_plan', priority: 'medium', notes: '' }); }
+  protected edit(debt: DebtApi) { this.editingId.set(debt.id); this.form.patchValue({ name: debt.name ?? '', initialAmount: Number(debt.initialAmount ?? debt.originalAmount ?? debt.totalAmount ?? 0), currentAmount: this.currentAmount(debt), minimumPayment: Number(debt.minimumPayment ?? 0), paymentDate: monthlyDateForDay(debt.paymentDay ?? 0), strategy: debt.strategy ?? 'bank_plan', priority: debt.priority ?? 'medium', notes: debt.notes ?? '' }); }
+  protected reset() { this.editingId.set(null); this.form.reset({ name: '', initialAmount: 0, currentAmount: 0, minimumPayment: 0, paymentDate: '', strategy: 'bank_plan', priority: 'medium', notes: '' }); }
   protected remove(debt: DebtApi) { if (!confirm(`¿Eliminar ${debt.name || 'esta deuda'}?`)) return; this.api.deleteDebt(debt.id).subscribe({ next: () => { this.events.notifyMoneyChanged(); this.load(); }, error: () => this.error.set('No se pudo eliminar la deuda.') }); }
   private load() { this.loading.set(true); this.error.set(''); this.api.getDebts().pipe(finalize(() => this.loading.set(false))).subscribe({ next: (debts) => this.debts.set(debts), error: () => this.error.set('No se pudieron cargar las deudas.') }); }
 }
@@ -101,6 +104,10 @@ function currencyAmount(control: AbstractControl): ValidationErrors | null {
   if (control.value === null || control.value === '') return null;
   const value = Number(control.value);
   return Number.isFinite(value) && /^-?\d+(\.\d{1,2})?$/.test(String(control.value)) ? null : { currencyAmount: true };
+}
+
+function monthlyPaymentDate(control: AbstractControl): ValidationErrors | null {
+  return !control.value || monthlyDayFromDate(String(control.value)) ? null : { monthlyPaymentDate: true };
 }
 
 function debtSaveError(error: unknown): string {
