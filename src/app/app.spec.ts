@@ -32,6 +32,7 @@ import { SettingsPage } from './features/settings/settings-page';
 import { authGuard } from './core/guards/auth.guard';
 import { routes } from './app.routes';
 import { vi } from 'vitest';
+import { By } from '@angular/platform-browser';
 
 let accessToken: string | null = null;
 const authStub = {
@@ -235,8 +236,16 @@ describe('App', () => {
     fixture.componentRef.setInput('contextual', true);
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
-    http.expectOne(apiUrl('/debts')).flush([]);
     const form = fixture.componentInstance['form'];
+
+    form.patchValue({ name: '', initialAmount: null as never, currentAmount: null as never, minimumPayment: null as never, paymentDay: null });
+    fixture.componentInstance['save']();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('El nombre es obligatorio.');
+    expect(fixture.nativeElement.textContent).toContain('El monto inicial es obligatorio.');
+    expect(fixture.nativeElement.textContent).toContain('El monto actual es obligatorio.');
+    expect(fixture.nativeElement.textContent).toContain('El pago mínimo es obligatorio.');
+    expect(fixture.nativeElement.textContent).toContain('El día de pago es obligatorio.');
 
     form.patchValue({ name: 'Tarjeta', initialAmount: 100, currentAmount: 200, minimumPayment: 0, paymentDay: 32 });
     fixture.componentInstance['save']();
@@ -252,6 +261,27 @@ describe('App', () => {
     expect(form.controls.paymentDay.hasError('min')).toBe(true);
     http.expectNone(apiUrl('/debts'));
 
+    form.patchValue({ initialAmount: 10000.001, currentAmount: 8500.001, minimumPayment: 500.001, paymentDay: 15 });
+    fixture.componentInstance['save']();
+    expect(form.controls.initialAmount.hasError('currencyAmount')).toBe(true);
+    expect(form.controls.currentAmount.hasError('currencyAmount')).toBe(true);
+    expect(form.controls.minimumPayment.hasError('currencyAmount')).toBe(true);
+    http.expectNone(apiUrl('/debts'));
+
+    form.patchValue({ initialAmount: 10000000000, currentAmount: 8500, minimumPayment: 500 });
+    fixture.componentInstance['save']();
+    expect(form.controls.initialAmount.hasError('max')).toBe(true);
+    http.expectNone(apiUrl('/debts'));
+
+    form.patchValue({ initialAmount: 10000.55, currentAmount: 8500.25, minimumPayment: 500.1, paymentDay: 15 });
+    expect(form.valid).toBe(true);
+
+    form.patchValue({ name: 'Tarjeta', initialAmount: 10000, currentAmount: 10000, minimumPayment: 500, paymentDay: 15, strategy: 'light', priority: 'high' });
+    fixture.componentInstance['save']();
+    const fullBalanceRequest = http.expectOne(apiUrl('/debts'));
+    expect(fullBalanceRequest.request.body).toMatchObject({ initialAmount: 10000, currentAmount: 10000, minimumPayment: 500, paymentDay: 15 });
+    fullBalanceRequest.flush({ id: 'debt-1', name: 'Tarjeta' });
+
     form.patchValue({ name: 'Tarjeta', initialAmount: 10000, currentAmount: 8500, minimumPayment: 500, paymentDay: 15, strategy: 'light', priority: 'high' });
     fixture.componentInstance['save']();
     const request = http.expectOne(apiUrl('/debts'));
@@ -259,6 +289,9 @@ describe('App', () => {
     expect(request.request.body).toMatchObject({ initialAmount: 10000, currentAmount: 8500, minimumPayment: 500, paymentDay: 15, strategy: 'light', priority: 'high' });
     request.flush({ id: 'debt-1', name: 'Tarjeta' });
     http.expectNone(apiUrl('/debts'));
+
+    const dayOptions = Array.from<HTMLOptionElement>(fixture.nativeElement.querySelectorAll('select[formcontrolname="paymentDay"] option:not([disabled])'));
+    expect(dayOptions.map((option) => Number(option.textContent))).toEqual(Array.from({ length: 31 }, (_, index) => index + 1));
   });
 
   it('should translate known debt validation responses from the backend', () => {
@@ -512,7 +545,8 @@ describe('App', () => {
     http.expectOne(apiUrl('/money/categories')).flush([]);
     http.expectOne(apiUrl('/money/expenses')).flush([]);
     http.expectOne(apiUrl('/budgets/current')).flush({ current: null, limits: [], summary: null });
-    http.expectOne(apiUrl('/debts')).flush([{ id: 'debt-1', name: 'Tarjeta', initialAmount: 1000, currentAmount: 600, minimumPayment: 100, progressPercent: 19.047619047619047, strategy: 'aggressive', priority: 'high', status: 'active' }]);
+    const debt = { id: 'debt-1', name: 'Tarjeta', initialAmount: 1000, currentAmount: 600, minimumPayment: 100, paymentDay: 15, progressPercent: 19.047619047619047, strategy: 'aggressive' as const, priority: 'high' as const, status: 'active' };
+    http.expectOne(apiUrl('/debts')).flush([debt]);
     http.expectOne(apiUrl('/savings/goals')).flush([{ id: 'goal-1', name: 'Viaje', currentAmount: 300, targetAmount: 1000, status: 'active' }]);
     http.expectOne(apiUrl('/settings')).flush({});
     http.expectOne(apiUrl('/income/sources')).flush([]);
@@ -526,10 +560,35 @@ describe('App', () => {
     expect(fixture.nativeElement.textContent).not.toContain('19.047619047619047%');
     expect(parseFloat(fixture.nativeElement.querySelector('.debt-card .progress-fill').style.width)).toBeCloseTo(19.047619047619047);
     const button = (label: string) => Array.from<HTMLButtonElement>(fixture.nativeElement.querySelectorAll('button')).find((item) => item.textContent?.trim() === label)!;
+
+    button('Editar').click();
+    fixture.detectChanges();
+    const manager = fixture.debugElement.query(By.directive(DebtsManager)).componentInstance as DebtsManager;
+    expect(manager['form'].getRawValue()).toMatchObject({ name: 'Tarjeta', initialAmount: 1000, currentAmount: 600, minimumPayment: 100, paymentDay: 15, strategy: 'aggressive', priority: 'high' });
+    http.expectNone(apiUrl('/debts'));
+    manager['form'].patchValue({ minimumPayment: 250 });
+    manager['save']();
+    const update = http.expectOne(apiUrl('/debts/debt-1'));
+    expect(update.request.method).toBe('PATCH');
+    expect(update.request.body).toMatchObject({ minimumPayment: 250, paymentDay: 15 });
+    expect(update.request.body.status).toBeUndefined();
+    update.flush({ ...debt, minimumPayment: 250 });
+    http.expectOne(apiUrl('/money/categories')).flush([]);
+    http.expectOne(apiUrl('/money/expenses')).flush([]);
+    http.expectOne(apiUrl('/budgets/current')).flush({ current: null, limits: [], summary: null });
+    http.expectOne(apiUrl('/debts')).flush([{ ...debt, minimumPayment: 250 }]);
+    http.expectOne(apiUrl('/savings/goals')).flush([{ id: 'goal-1', name: 'Viaje', currentAmount: 300, targetAmount: 1000, status: 'active' }]);
+    http.expectOne(apiUrl('/settings')).flush({});
+    http.expectOne(apiUrl('/income/sources')).flush([]);
+    http.expectOne(apiUrl('/recurring-payments')).flush([]);
+    fixture.detectChanges();
+    expect(fixture.componentInstance['activeTab']()).toBe('debt');
+    expect(fixture.nativeElement.querySelector('app-debts-manager')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('$250');
+
     button('＋ Agregar').click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('app-debts-manager')).not.toBeNull();
-    http.expectOne(apiUrl('/debts')).flush([]);
     fixture.componentInstance['modal'].set(null);
 
     fixture.componentInstance['activeTab'].set('saving');

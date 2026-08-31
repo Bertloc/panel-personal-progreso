@@ -177,7 +177,7 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
         <section class="surface-card empty-state">
           <h2 class="section-card-title">Deudas</h2>
           <p class="section-card-copy">Aún no tienes deudas registradas.</p>
-          <button class="card-link button-link" type="button" (click)="modal.set('debt')">Agregar deuda</button>
+          <button class="card-link button-link" type="button" (click)="openDebt()">Agregar deuda</button>
         </section>
       }
 
@@ -236,10 +236,10 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
             <div class="summary-grid debt-summary"><div><p class="card-meta">Pago mínimo mensual</p><strong>{{ debtMinimum() | appCurrency }}</strong></div><div><p class="card-meta">Progreso liquidación</p><strong class="value-green">{{ roundedPercent(debtProgress()) }}%</strong></div></div>
           </section>
           <section class="section-block">
-            <div class="section-heading"><h2>Tus deudas</h2><button class="card-link button-link" type="button" (click)="modal.set('debt')">＋ Agregar</button></div>
+            <div class="section-heading"><h2>Tus deudas</h2><button class="card-link button-link" type="button" (click)="openDebt()">＋ Agregar</button></div>
             @for (debt of debts(); track debt.id) {
               <article class="surface-card debt-card">
-                <div class="split-line"><div class="debt-name"><i [class]="'debt-dot debt-dot--' + debt.priority"></i><div><strong>{{ debt.name || 'Deuda' }}</strong><p class="card-meta">{{ debtStrategyLabel(debt.strategy) }}</p></div></div>@if (debtApr(debt); as apr) { <span [class]="debtAprClass(apr)">{{ oneDecimalPercent(apr) }}% APR</span> }</div>
+                <div class="split-line"><div class="debt-name"><i [class]="'debt-dot debt-dot--' + debt.priority"></i><div><strong>{{ debt.name || 'Deuda' }}</strong><p class="card-meta">{{ debtStrategyLabel(debt.strategy) }}</p></div></div><div class="debt-card-actions">@if (debtApr(debt); as apr) { <span [class]="debtAprClass(apr)">{{ oneDecimalPercent(apr) }}% APR</span> }<button class="card-link button-link" type="button" (click)="openDebt(debt)">Editar</button></div></div>
                 <div class="split-line debt-values"><div><p class="card-meta">Saldo</p><strong>{{ debtBalance(debt) | appCurrency }}</strong></div><div class="align-end"><p class="card-meta">Pago mín. <b>{{ debtMinimumOf(debt) | appCurrency }}</b></p><p class="card-meta">{{ debtDue(debt) }}</p></div></div>
                 <div class="split-line payoff"><span>Liquidado</span><strong>{{ roundedPercent(debtProgressOf(debt)) }}%</strong></div>
                 <div class="progress-track"><span [class]="debtProgressClass(debt.priority)" [style.width.%]="debtProgressOf(debt)"></span></div>
@@ -247,7 +247,7 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
             }
           </section>
         } @else {
-          <section class="surface-card empty-state"><h2 class="section-card-title">Sin deudas registradas</h2><p class="section-card-copy">Cuando agregues una deuda verás aquí su avance de liquidación.</p><button class="card-link button-link" type="button" (click)="modal.set('debt')">Agregar deuda</button></section>
+          <section class="surface-card empty-state"><h2 class="section-card-title">Sin deudas registradas</h2><p class="section-card-copy">Cuando agregues una deuda verás aquí su avance de liquidación.</p><button class="card-link button-link" type="button" (click)="openDebt()">Agregar deuda</button></section>
         }
       } @else {
         @if (goals().length) {
@@ -279,7 +279,7 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
 
     @switch (modal()) {
       @case ('payment') { <app-action-modal title="Agregar próximo pago" (close)="modal.set(null)"><app-recurring-payments-manager /></app-action-modal> }
-      @case ('debt') { <app-action-modal title="Agregar deuda" (close)="modal.set(null)"><app-debts-manager [contextual]="true" (saved)="modal.set(null)" /></app-action-modal> }
+      @case ('debt') { <app-action-modal [title]="selectedDebt() ? 'Editar deuda' : 'Agregar deuda'" (close)="closeDebt()"><app-debts-manager [contextual]="true" [initialDebt]="selectedDebt()" (saved)="closeDebt()" /></app-action-modal> }
       @case ('saving') { <app-action-modal title="Crear meta de ahorro" (close)="modal.set(null)"><app-savings-manager [contextual]="true" (saved)="modal.set(null)" /></app-action-modal> }
       @case ('expense') { <app-quick-create action="expense" [contextualCategories]="true" (close)="modal.set(null)" (created)="modal.set(null)" (manageCategories)="modal.set('category')" /> }
       @case ('category') { <app-action-modal title="Administrar categorías" (close)="modal.set(null)"><app-category-manager [contextual]="true" (saved)="modal.set(null)" /></app-action-modal> }
@@ -494,6 +494,7 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
     .section-heading .button-link { color: var(--color-green); }
     .debt-card, .goal-card { display: grid; gap: 14px; padding: 18px; }
     .debt-name { display: flex; align-items: center; gap: 10px; }
+    .debt-card-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 12px; }
     .debt-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--color-orange); }
     .debt-dot--urgent, .debt-dot--high { background: var(--color-red); }
     .debt-dot--low { background: var(--color-purple); }
@@ -525,6 +526,7 @@ export class MoneyPage {
   protected readonly apiError = signal(false);
   protected readonly loading = signal(true);
   protected readonly modal = signal<'payment' | 'debt' | 'saving' | 'expense' | 'category' | 'budget' | null>(null);
+  protected readonly selectedDebt = signal<DebtApi | null>(null);
   protected readonly activeTab = signal<'budget' | 'debt' | 'saving'>('budget');
   protected readonly tabs = [{ id: 'budget' as const, label: 'Presupuesto' }, { id: 'debt' as const, label: 'Deuda' }, { id: 'saving' as const, label: 'Ahorro' }];
   protected readonly debts = signal<DebtApi[]>([]);
@@ -538,6 +540,9 @@ export class MoneyPage {
   protected get categories() { return this.view().categories; }
   protected get savingsGoals() { return this.view().savingsGoals; }
   protected get recentExpenses() { return this.view().recentExpenses; }
+
+  protected openDebt(debt: DebtApi | null = null) { this.selectedDebt.set(debt); this.modal.set('debt'); }
+  protected closeDebt() { this.modal.set(null); this.selectedDebt.set(null); }
 
   constructor() {
     this.loadMoneyView();
