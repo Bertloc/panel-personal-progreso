@@ -14,7 +14,8 @@ import { SettingsApiService } from '../../core/services/settings-api.service';
 import { QuickCreateEventsService } from '../../core/services/quick-create-events.service';
 import { IncomeApiService } from '../../core/services/income-api.service';
 import { RecurringPaymentsApiService } from '../../core/services/recurring-payments-api.service';
-import { debtStrategyLabel, oneDecimalPercent, roundedPercent } from '../../core/utils/money-display.util';
+import { debtStrategyLabel, oneDecimalPercent, roundedPercent, savingsAmountsAreValid, savingsExcessAmount, savingsProgressPercent, savingsRemainingAmount } from '../../core/utils/money-display.util';
+import { toNumber } from '../../core/utils/number.util';
 import { ActionModal } from '../../shared/components/action-modal/action-modal';
 import { QuickCreate } from '../../shared/components/quick-create/quick-create';
 import { BudgetManager } from './setup/budget-manager';
@@ -219,6 +220,14 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
                   [style.width.%]="getProgressPercent(goal.current, goal.target)"
                 ></span>
               </div>
+              @if (!savingsAmountsAreValid(goal.current, goal.target)) {
+                <p class="card-meta">Datos de la meta inconsistentes.</p>
+              } @else if (goal.current >= goal.target) {
+                <p class="card-meta"><strong>Meta alcanzada</strong></p>
+                @if (savingsExcessAmount(goal.current, goal.target); as excess) { <p class="card-meta">Excedente: <strong>{{ excess | appCurrency }}</strong></p> }
+              } @else {
+                <p class="card-meta">Faltan <strong>{{ savingsRemainingAmount(goal.current, goal.target) | appCurrency }}</strong></p>
+              }
             </div>
           } @empty {
             <p class="section-card-copy">Aún no tienes metas de ahorro.</p>
@@ -262,10 +271,17 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
             <div class="section-heading"><h2>Metas de ahorro</h2><button class="card-link button-link" type="button" (click)="modal.set('saving')">＋ Agregar</button></div>
             @for (goal of goals(); track goal.id) {
               <article class="surface-card goal-card">
-                <div class="split-line"><div><strong>{{ goal.name }}</strong>@if (goal.targetDate) { <p class="card-meta">Meta {{ formatDate(goal.targetDate) }}</p> }</div><span class="status-badge status-badge--purple">{{ roundedPercent(goalProgress(goal)) }}%</span></div>
+                <div class="split-line"><div><strong>{{ goal.name }}</strong>@if (goal.targetDate) { <p class="card-meta">Meta {{ formatDate(goal.targetDate) }}</p> }</div><span class="status-badge status-badge--purple">{{ goalAmountsAreValid(goal) ? roundedPercent(goalProgress(goal)) + '%' : '—' }}</span></div>
                 <div class="split-line goal-values"><span>{{ goalCurrent(goal) | appCurrency }} / {{ goalTarget(goal) | appCurrency }}</span>@if (goal.monthlyContribution) { <span>{{ goalMonthly(goal) | appCurrency }}/mes</span> }</div>
                 <div class="progress-track"><span class="progress-fill progress-fill--purple" [style.width.%]="goalProgress(goal)"></span></div>
-                <p class="card-meta">Falta <strong>{{ goalRemaining(goal) | appCurrency }}</strong></p>
+                @if (!goalAmountsAreValid(goal)) {
+                  <p class="card-meta">Datos de la meta inconsistentes.</p>
+                } @else if (goalCurrent(goal) >= goalTarget(goal)) {
+                  <p class="card-meta"><strong>Meta alcanzada</strong></p>
+                  @if (goalExcess(goal); as excess) { <p class="card-meta">Excedente: <strong>{{ excess | appCurrency }}</strong></p> }
+                } @else {
+                  <p class="card-meta">Faltan <strong>{{ goalRemaining(goal) | appCurrency }}</strong></p>
+                }
               </article>
             }
           </section>
@@ -534,6 +550,9 @@ export class MoneyPage {
   protected readonly debtStrategyLabel = debtStrategyLabel;
   protected readonly oneDecimalPercent = oneDecimalPercent;
   protected readonly roundedPercent = roundedPercent;
+  protected readonly savingsAmountsAreValid = savingsAmountsAreValid;
+  protected readonly savingsRemainingAmount = savingsRemainingAmount;
+  protected readonly savingsExcessAmount = savingsExcessAmount;
   protected get paycheck() { return this.view().paycheck; }
   protected get upcomingPayments() { return this.view().upcomingPayments; }
   protected get debtInfo() { return this.view().debtInfo; }
@@ -570,11 +589,11 @@ export class MoneyPage {
   }
 
   protected getProgressPercent(used: number, limit: number): number {
-    if (limit <= 0) {
+    if (!Number.isFinite(used) || !Number.isFinite(limit) || limit <= 0) {
       return 0;
     }
 
-    return Math.min(100, Math.round((used / limit) * 100));
+    return Math.max(0, Math.min(100, Math.round((used / limit) * 100)));
   }
 
   protected getRemaining(used: number, limit: number): number {
@@ -613,10 +632,12 @@ export class MoneyPage {
   protected debtAprClass(apr: number) { return `status-badge status-badge--${apr >= 30 ? 'red' : apr > 0 ? 'orange' : 'green'}`; }
   protected debtProgressClass(priority?: DebtApi['priority']) { return `progress-fill progress-fill--${priority === 'urgent' || priority === 'high' ? 'red' : priority === 'low' ? 'purple' : 'orange'}`; }
   protected debtDue(debt: DebtApi) { return debt.nextPaymentDate ? `Vence ${this.formatDate(debt.nextPaymentDate)}` : debt.paymentDay ? `Vence el día ${debt.paymentDay}` : 'Sin fecha de pago'; }
-  protected goalCurrent(goal: SavingsGoalApi) { return Number(goal.currentAmount ?? goal.current ?? 0); }
-  protected goalTarget(goal: SavingsGoalApi) { return Number(goal.targetAmount ?? goal.target ?? 0); }
+  protected goalCurrent(goal: SavingsGoalApi) { return Math.max(0, toNumber(goal.currentAmount ?? goal.current)); }
+  protected goalTarget(goal: SavingsGoalApi) { return Math.max(0, toNumber(goal.targetAmount ?? goal.target)); }
   protected goalMonthly(goal: SavingsGoalApi) { return Number(goal.monthlyContribution ?? 0); }
-  protected goalProgress(goal: SavingsGoalApi) { return goal.progressPercent ?? this.getProgressPercent(this.goalCurrent(goal), this.goalTarget(goal)); }
-  protected goalRemaining(goal: SavingsGoalApi) { return Math.max(0, Number(goal.remainingAmount ?? this.goalTarget(goal) - this.goalCurrent(goal))); }
+  protected goalAmountsAreValid(goal: SavingsGoalApi) { return savingsAmountsAreValid(goal.currentAmount ?? goal.current, goal.targetAmount ?? goal.target); }
+  protected goalProgress(goal: SavingsGoalApi) { return savingsProgressPercent(goal.currentAmount ?? goal.current, goal.targetAmount ?? goal.target); }
+  protected goalRemaining(goal: SavingsGoalApi) { return savingsRemainingAmount(goal.currentAmount ?? goal.current, goal.targetAmount ?? goal.target); }
+  protected goalExcess(goal: SavingsGoalApi) { return savingsExcessAmount(goal.currentAmount ?? goal.current, goal.targetAmount ?? goal.target); }
   protected formatDate(value: string) { return new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${value.slice(0, 10)}T12:00:00`)); }
 }

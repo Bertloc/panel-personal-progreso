@@ -4,7 +4,8 @@ import { finalize } from 'rxjs';
 import { SavingGoalStatus, SavingsGoalApi } from '../../../core/models/savings.model';
 import { QuickCreateEventsService } from '../../../core/services/quick-create-events.service';
 import { SavingsApiService } from '../../../core/services/savings-api.service';
-import { roundedPercent } from '../../../core/utils/money-display.util';
+import { roundedPercent, savingsAmountsAreValid, savingsExcessAmount, savingsProgressPercent, savingsRemainingAmount } from '../../../core/utils/money-display.util';
+import { toNumber } from '../../../core/utils/number.util';
 import { AppCurrencyPipe } from '../../../shared/pipes/app-currency.pipe';
 
 @Component({
@@ -28,7 +29,15 @@ import { AppCurrencyPipe } from '../../../shared/pipes/app-currency.pipe';
       @if (loading()) { <p class="empty">Cargando metas…</p> } @else if (!error()) {
         <div class="items">
           @for (goal of goals(); track goal.id) {
-            <article class="item"><div class="item-head"><strong>{{ goal.name }}</strong><strong>{{ current(goal) | appCurrency }} / {{ target(goal) | appCurrency }}</strong></div><div class="progress-track"><span class="progress-fill progress-fill--green" [style.width.%]="progress(goal)"></span></div><p class="meta">{{ roundedPercent(progress(goal)) }}% · {{ goal.targetDate || 'sin fecha objetivo' }}</p><div class="actions"><button class="secondary" type="button" (click)="edit(goal)">Editar</button><button class="danger" type="button" (click)="remove(goal)">Eliminar</button></div></article>
+            <article class="item">
+              <div class="item-head"><strong>{{ goal.name }}</strong><strong>{{ current(goal) | appCurrency }} / {{ target(goal) | appCurrency }}</strong></div>
+              <div class="progress-track"><span class="progress-fill progress-fill--green" [style.width.%]="progress(goal)"></span></div>
+              <p class="meta">{{ validAmounts(goal) ? roundedPercent(progress(goal)) + '%' : 'Sin avance calculable' }} · {{ goal.targetDate || 'sin fecha objetivo' }}</p>
+              @if (!validAmounts(goal)) { <p class="meta">Datos de la meta inconsistentes.</p> }
+              @else if (current(goal) >= target(goal)) { <p class="meta"><strong>Meta alcanzada</strong>@if (excess(goal); as amount) { · Excedente: {{ amount | appCurrency }} }</p> }
+              @else { <p class="meta">Faltan {{ remaining(goal) | appCurrency }}</p> }
+              <div class="actions"><button class="secondary" type="button" (click)="edit(goal)">Editar</button><button class="danger" type="button" (click)="remove(goal)">Eliminar</button></div>
+            </article>
           } @empty { <p class="empty">Aún no tienes metas de ahorro.</p> }
         </div>
       }
@@ -44,9 +53,12 @@ export class SavingsManager {
   protected readonly form = this.fb.nonNullable.group({ name: ['', Validators.required], targetAmount: [0, [Validators.required, Validators.min(.01)]], currentAmount: [0, Validators.min(0)], targetDate: '', priority: 'medium', notes: '' });
   protected readonly roundedPercent = roundedPercent;
   constructor() { this.load(); }
-  protected current(goal: SavingsGoalApi) { return Number(goal.currentAmount ?? goal.current ?? 0); }
-  protected target(goal: SavingsGoalApi) { return Number(goal.targetAmount ?? goal.target ?? 0); }
-  protected progress(goal: SavingsGoalApi) { const target = this.target(goal); return goal.progressPercent ?? (target ? Math.min(100, Math.round(this.current(goal) / target * 100)) : 0); }
+  protected current(goal: SavingsGoalApi) { return Math.max(0, toNumber(goal.currentAmount ?? goal.current)); }
+  protected target(goal: SavingsGoalApi) { return Math.max(0, toNumber(goal.targetAmount ?? goal.target)); }
+  protected validAmounts(goal: SavingsGoalApi) { return savingsAmountsAreValid(goal.currentAmount ?? goal.current, goal.targetAmount ?? goal.target); }
+  protected progress(goal: SavingsGoalApi) { return savingsProgressPercent(goal.currentAmount ?? goal.current, goal.targetAmount ?? goal.target); }
+  protected remaining(goal: SavingsGoalApi) { return savingsRemainingAmount(goal.currentAmount ?? goal.current, goal.targetAmount ?? goal.target); }
+  protected excess(goal: SavingsGoalApi) { return savingsExcessAmount(goal.currentAmount ?? goal.current, goal.targetAmount ?? goal.target); }
   protected save() {
     if (this.form.invalid || this.saving()) return;
     const value = this.form.getRawValue(); const id = this.editingId();

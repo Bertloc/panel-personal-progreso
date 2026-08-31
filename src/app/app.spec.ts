@@ -27,7 +27,7 @@ import { priorityToClass, priorityToColor } from './core/utils/priority-color.ut
 import { MoneyPage } from './features/money/money-page';
 import { DebtsManager } from './features/money/setup/debts-manager';
 import { API_BASE_URL } from './core/config/api.config';
-import { debtPriorityLabel, debtStrategyLabel, oneDecimalPercent, roundedPercent } from './core/utils/money-display.util';
+import { debtPriorityLabel, debtStrategyLabel, oneDecimalPercent, roundedPercent, savingsAmountsAreValid, savingsExcessAmount, savingsProgressPercent, savingsRemainingAmount } from './core/utils/money-display.util';
 import { SettingsPage } from './features/settings/settings-page';
 import { authGuard } from './core/guards/auth.guard';
 import { routes } from './app.routes';
@@ -231,6 +231,38 @@ describe('App', () => {
     const savingRequest = http.expectOne(apiUrl('/savings/goals/goal-1/movements'));
     expect(savingRequest.request.body).toMatchObject({ amount: 300, movementDate: '2026-07-15', type: 'deposit' });
     savingRequest.flush({ id: 'movement-1', goalId: 'goal-1', amount: 300 });
+  });
+
+  it('should explain a selected saving goal and only warn for positive movements above its target', () => {
+    const fixture = TestBed.createComponent(QuickCreate);
+    fixture.componentRef.setInput('action', 'saving');
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(apiUrl('/savings/goals')).flush([
+      { id: 'goal-1', name: 'Laptop', currentAmount: 8000, targetAmount: 10000, status: 'active' },
+      { id: 'goal-2', name: 'Viaje', currentAmount: 12000, targetAmount: 10000, status: 'completed' },
+    ]);
+
+    fixture.componentInstance.form.patchValue({ targetId: 'goal-1', amount: 3000, type: 'deposit' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Objetivo $10,000');
+    expect(fixture.nativeElement.textContent).toContain('Ahorrado $8,000');
+    expect(fixture.nativeElement.textContent).toContain('Faltan: $2,000');
+    expect(fixture.nativeElement.textContent).toContain('Este aporte supera la meta por $1,000.');
+
+    fixture.componentInstance.form.patchValue({ type: 'withdrawal' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).not.toContain('supera la meta');
+
+    fixture.componentInstance.form.patchValue({ type: 'adjustment' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Este ajuste supera la meta por $1,000.');
+
+    fixture.componentInstance.form.patchValue({ targetId: 'goal-2', amount: 500, type: 'deposit' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Esta meta ya fue alcanzada.');
+    expect(fixture.nativeElement.textContent).toContain('Excedente actual: $2,000');
+    expect(fixture.nativeElement.textContent).toContain('Este movimiento dejará un excedente de $2,500.');
   });
 
   it('should enforce the debt contract before sending and accept a valid debt', () => {
@@ -597,7 +629,7 @@ describe('App', () => {
     http.expectOne(apiUrl('/budgets/current')).flush({ current: null, limits: [], summary: null });
     const debt = { id: 'debt-1', name: 'Tarjeta', initialAmount: 1000, currentAmount: 600, minimumPayment: 100, paymentDay: 15, progressPercent: 19.047619047619047, strategy: 'aggressive' as const, priority: 'high' as const, status: 'active' };
     http.expectOne(apiUrl('/debts')).flush([debt]);
-    http.expectOne(apiUrl('/savings/goals')).flush([{ id: 'goal-1', name: 'Viaje', currentAmount: 300, targetAmount: 1000, status: 'active' }]);
+    http.expectOne(apiUrl('/savings/goals')).flush([{ id: 'goal-1', name: 'Viaje', currentAmount: 300, targetAmount: 1000, progressPercent: 100, status: 'active' }]);
     http.expectOne(apiUrl('/settings')).flush({});
     http.expectOne(apiUrl('/income/sources')).flush([]);
     http.expectOne(apiUrl('/recurring-payments')).flush([]);
@@ -630,7 +662,7 @@ describe('App', () => {
     http.expectOne(apiUrl('/money/expenses')).flush([]);
     http.expectOne(apiUrl('/budgets/current')).flush({ current: null, limits: [], summary: null });
     http.expectOne(apiUrl('/debts')).flush([updatedDebt]);
-    http.expectOne(apiUrl('/savings/goals')).flush([{ id: 'goal-1', name: 'Viaje', currentAmount: 300, targetAmount: 1000, status: 'active' }]);
+    http.expectOne(apiUrl('/savings/goals')).flush([{ id: 'goal-1', name: 'Viaje', currentAmount: 300, targetAmount: 1000, progressPercent: 100, status: 'active' }]);
     http.expectOne(apiUrl('/settings')).flush({});
     http.expectOne(apiUrl('/income/sources')).flush([]);
     http.expectOne(apiUrl('/recurring-payments')).flush([]);
@@ -648,6 +680,9 @@ describe('App', () => {
     fixture.componentInstance['activeTab'].set('saving');
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Viaje');
+    expect(fixture.nativeElement.textContent).toContain('30%');
+    expect(fixture.nativeElement.textContent).toContain('Faltan $700');
+    expect(fixture.nativeElement.textContent).not.toContain('100%');
     button('＋ Agregar').click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('app-savings-manager')).not.toBeNull();
@@ -694,6 +729,16 @@ describe('App', () => {
     expect(roundedPercent(99.6)).toBe(100);
     expect(oneDecimalPercent(19.047)).toBe(19);
     expect(oneDecimalPercent(19.06)).toBe(19.1);
+  });
+
+  it('should calculate safe savings progress, remaining amount, and excess from real amounts', () => {
+    expect(savingsProgressPercent(2500, 10000)).toBe(25);
+    expect(savingsProgressPercent(12000, 10000)).toBe(100);
+    expect(savingsRemainingAmount(8000, 10000)).toBe(2000);
+    expect(savingsExcessAmount(12000, 10000)).toBe(2000);
+    expect(savingsAmountsAreValid(-1, 10000)).toBe(false);
+    expect(savingsAmountsAreValid(100, 0)).toBe(false);
+    expect(savingsProgressPercent(null, null)).toBe(0);
   });
 
   it('should derive heatmap status from daily signals', () => {

@@ -8,6 +8,8 @@ import { IncomeSource } from '../../../core/models/income.model';
 import { MoneyCategoryApi } from '../../../core/models/money.model';
 import { ProjectPriority, ProjectStatus } from '../../../core/models/projects.model';
 import { SavingsGoalApi } from '../../../core/models/savings.model';
+import { savingsAmountsAreValid, savingsExcessAmount, savingsRemainingAmount } from '../../../core/utils/money-display.util';
+import { toNumber } from '../../../core/utils/number.util';
 import { DebtsApiService } from '../../../core/services/debts-api.service';
 import { IncomeApiService } from '../../../core/services/income-api.service';
 import { MoneyApiService } from '../../../core/services/money-api.service';
@@ -15,6 +17,7 @@ import { ProjectsApiService } from '../../../core/services/projects-api.service'
 import { QuickCreateEventsService } from '../../../core/services/quick-create-events.service';
 import { SavingsApiService } from '../../../core/services/savings-api.service';
 import { ActionModal } from '../action-modal/action-modal';
+import { AppCurrencyPipe } from '../../pipes/app-currency.pipe';
 
 export type QuickAction = 'expense' | 'income' | 'debt-payment' | 'saving' | 'routine' | 'project';
 
@@ -25,7 +28,7 @@ const ACTION_TITLES: Record<QuickAction, string> = {
 
 @Component({
   selector: 'app-quick-create',
-  imports: [ReactiveFormsModule, RouterLink, ActionModal],
+  imports: [ReactiveFormsModule, RouterLink, ActionModal, AppCurrencyPipe],
   template: `
     <app-action-modal [title]="title" (close)="close.emit()">
       <form [formGroup]="form" (ngSubmit)="save()">
@@ -71,7 +74,29 @@ const ACTION_TITLES: Record<QuickAction, string> = {
           @case ('saving') {
             <label>Meta de ahorro <select formControlName="targetId"><option value="">Selecciona una meta</option>@for (goal of goals(); track goal.id) { <option [value]="goal.id">{{ goal.name }}</option> }</select></label>
             @if (!loadingOptions() && !error() && !goals().length) { <p class="empty">Primero crea una meta de ahorro. <a routerLink="/money/setup" (click)="close.emit()">Ir a configurar dinero</a></p> }
+            @if (selectedSavingGoal(); as goal) {
+              <section class="saving-summary" aria-live="polite">
+                <strong>{{ goal.name }}</strong>
+                @if (savingGoalAmountsAreValid(goal)) {
+                  <div class="saving-summary-grid">
+                    <span>Objetivo <strong>{{ savingGoalTarget(goal) | appCurrency }}</strong></span>
+                    <span>Ahorrado <strong>{{ savingGoalCurrent(goal) | appCurrency }}</strong></span>
+                  </div>
+                  @if (savingGoalCurrent(goal) >= savingGoalTarget(goal)) {
+                    <p class="success">Esta meta ya fue alcanzada.</p>
+                    @if (savingGoalExcess(goal); as excess) { <p>Excedente actual: {{ excess | appCurrency }}</p> }
+                  } @else {
+                    <p>Faltan: <strong>{{ savingGoalRemaining(goal) | appCurrency }}</strong></p>
+                  }
+                } @else {
+                  <p class="error">Los importes de esta meta son inconsistentes.</p>
+                }
+              </section>
+            }
             <label>Monto <input formControlName="amount" type="number" min="0.01" step="0.01"></label>
+            @if (savingOverage(); as overage) {
+              <p class="warning" role="status">{{ savingOverageLabel() }} {{ overage | appCurrency }}.</p>
+            }
             <label>Fecha <input formControlName="date" type="date"></label>
             <label>Tipo <select formControlName="type"><option value="deposit">Aporte</option><option value="withdrawal">Retiro</option><option value="adjustment">Ajuste</option></select></label>
             <label>Nota (opcional) <textarea formControlName="note" rows="2"></textarea></label>
@@ -122,6 +147,11 @@ const ACTION_TITLES: Record<QuickAction, string> = {
     .notice, .empty { color: var(--color-text-secondary); }
     .empty a { color: #b8beff; }
     .error { color: var(--color-red); }
+    .saving-summary { display: grid; gap: 9px; padding: 12px; border: 1px solid var(--color-border); border-radius: 13px; background: rgb(255 255 255 / 3%); }
+    .saving-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; color: var(--color-text-secondary); font-size: .82rem; }
+    .saving-summary-grid strong { display: block; margin-top: 3px; color: var(--color-text); }
+    .success { color: var(--color-green); font-weight: 700; }
+    .warning { padding: 10px 12px; border-radius: 11px; background: rgb(255 180 75 / 12%); color: var(--color-orange); }
   `,
 })
 export class QuickCreate implements OnInit {
@@ -155,6 +185,21 @@ export class QuickCreate implements OnInit {
   ngOnInit(): void { this.configure(this.action()); }
 
   get title(): string { return ACTION_TITLES[this.action()]; }
+
+  protected selectedSavingGoal(): SavingsGoalApi | undefined { return this.goals().find(({ id }) => id === this.form.controls.targetId.value); }
+  protected savingGoalCurrent(goal: SavingsGoalApi): number { return Math.max(0, toNumber(goal.currentAmount ?? goal.current)); }
+  protected savingGoalTarget(goal: SavingsGoalApi): number { return Math.max(0, toNumber(goal.targetAmount ?? goal.target)); }
+  protected savingGoalAmountsAreValid(goal: SavingsGoalApi): boolean { return savingsAmountsAreValid(goal.currentAmount ?? goal.current, goal.targetAmount ?? goal.target); }
+  protected savingGoalRemaining(goal: SavingsGoalApi): number { return savingsRemainingAmount(goal.currentAmount ?? goal.current, goal.targetAmount ?? goal.target); }
+  protected savingGoalExcess(goal: SavingsGoalApi): number { return savingsExcessAmount(goal.currentAmount ?? goal.current, goal.targetAmount ?? goal.target); }
+  protected savingGoalReached(): boolean { const goal = this.selectedSavingGoal(); return !!goal && this.savingGoalAmountsAreValid(goal) && this.savingGoalCurrent(goal) >= this.savingGoalTarget(goal); }
+  protected savingOverageLabel(): string { return this.savingGoalReached() ? 'Este movimiento dejará un excedente de' : this.form.controls.type.value === 'adjustment' ? 'Este ajuste supera la meta por' : 'Este aporte supera la meta por'; }
+  protected savingOverage(): number {
+    const goal = this.selectedSavingGoal();
+    const amount = toNumber(this.form.controls.amount.value);
+    if (!goal || !this.savingGoalAmountsAreValid(goal) || this.form.controls.type.value === 'withdrawal' || amount <= 0) return 0;
+    return savingsExcessAmount(this.savingGoalCurrent(goal) + amount, this.savingGoalTarget(goal));
+  }
 
   save(): void {
     if (this.form.invalid || this.saving()) return;
@@ -237,7 +282,7 @@ export class QuickCreate implements OnInit {
         if (action === 'expense') this.categories.set((items as MoneyCategoryApi[]).filter(({ type, isActive }) => (!type || type === 'expense') && isActive !== false));
         if (action === 'income') this.incomeSources.set((items as IncomeSource[]).filter(({ isActive }) => isActive));
         if (action === 'debt-payment') this.debts.set((items as DebtApi[]).filter(({ status }) => !status || status === 'active'));
-        if (action === 'saving') this.goals.set((items as SavingsGoalApi[]).filter(({ status }) => !status || status === 'active'));
+        if (action === 'saving') this.goals.set((items as SavingsGoalApi[]).filter(({ status }) => !status || status === 'active' || status === 'completed'));
       },
       error: () => this.error.set('No se pudieron cargar las opciones.'),
     });
