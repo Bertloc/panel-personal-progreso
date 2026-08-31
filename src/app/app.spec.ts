@@ -199,6 +199,9 @@ describe('App', () => {
     fixture.componentRef.setInput('action', 'income');
     fixture.detectChanges();
     const http = TestBed.inject(HttpTestingController);
+    let createdMessage = '';
+    fixture.componentInstance.created.subscribe((message) => createdMessage = message);
+    expect(fixture.nativeElement.textContent).toContain('No cambia tu ingreso configurado ni tu presupuesto.');
     http.expectOne(apiUrl('/income/sources')).flush([]);
     fixture.componentInstance.form.patchValue({ amount: 4730, date: '2026-07-15', type: 'regular', note: 'Quincena' });
 
@@ -208,6 +211,29 @@ describe('App', () => {
     expect(request.request.method).toBe('POST');
     expect(request.request.body).toEqual({ sourceId: undefined, amount: 4730, incomeDate: '2026-07-15', type: 'regular', note: 'Quincena' });
     request.flush({ id: 'income-1', amount: 4730, incomeDate: '2026-07-15', type: 'regular' });
+    expect(createdMessage).toBe('Ingreso de $4,730 registrado.');
+  });
+
+  it('should preserve every income type and show useful backend errors', () => {
+    const fixture = TestBed.createComponent(QuickCreate);
+    fixture.componentRef.setInput('action', 'income');
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(apiUrl('/income/sources')).flush([]);
+
+    for (const type of ['extra', 'adjustment', 'other'] as const) {
+      fixture.componentInstance.form.patchValue({ amount: 5000, date: '2026-08-30', type });
+      fixture.componentInstance.save();
+      const request = http.expectOne(apiUrl('/income/events'));
+      expect(request.request.body.type).toBe(type);
+      request.flush({ id: `income-${type}`, amount: 5000, incomeDate: '2026-08-30', type });
+    }
+
+    fixture.componentInstance.form.patchValue({ sourceId: 'missing', amount: 5000, date: '2026-08-30', type: 'regular' });
+    fixture.componentInstance.save();
+    http.expectOne(apiUrl('/income/events')).flush({ message: 'Income source not found' }, { status: 404, statusText: 'Not Found' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('La fuente seleccionada ya no está disponible.');
   });
 
   it('should create debt and saving movements through their real endpoints', () => {
@@ -633,6 +659,9 @@ describe('App', () => {
     http.expectOne(apiUrl('/settings')).flush({});
     http.expectOne(apiUrl('/income/sources')).flush([]);
     http.expectOne(apiUrl('/recurring-payments')).flush([]);
+    http.expectOne((request) => request.url === apiUrl('/income/events') && request.params.get('limit') === '5').flush([
+      { id: 'income-1', amount: 5000, incomeDate: '2026-08-30', type: 'regular', source: 'manual' },
+    ]);
 
     fixture.componentInstance['activeTab'].set('debt');
     fixture.detectChanges();
@@ -691,6 +720,17 @@ describe('App', () => {
 
     fixture.componentInstance['activeTab'].set('budget');
     fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Ingresos recientes');
+    expect(fixture.nativeElement.textContent).toContain('Ingreso manual');
+    expect(fixture.nativeElement.textContent).toContain('+$5,000');
+    TestBed.inject(QuickCreateEventsService).notifyMoneyChanged('income');
+    http.expectOne((request) => request.url === apiUrl('/income/events') && request.params.get('limit') === '5').flush([
+      { id: 'income-2', amount: 700, incomeDate: '2026-08-30', type: 'extra', source: 'manual' },
+    ]);
+    http.expectNone(apiUrl('/income/sources'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Extra');
+    expect(fixture.nativeElement.textContent).toContain('+$700');
     button('Registrar gasto').click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('app-quick-create')).not.toBeNull();

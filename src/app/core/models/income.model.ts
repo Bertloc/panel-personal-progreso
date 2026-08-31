@@ -19,6 +19,8 @@ export type IncomeEventType = 'regular' | 'extra' | 'adjustment' | 'other';
 export interface IncomeEvent {
   id: string;
   sourceId?: string | null;
+  source?: string;
+  incomeSource?: Pick<IncomeSource, 'id' | 'name'> | null;
   amount: string | number;
   incomeDate: string;
   type: IncomeEventType;

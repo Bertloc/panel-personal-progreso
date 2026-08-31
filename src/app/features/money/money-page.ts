@@ -5,6 +5,7 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
 import { MoneyCategoryStatus } from '../../core/models/money.model';
 import { DebtApi } from '../../core/models/debts.model';
 import { SavingsGoalApi } from '../../core/models/savings.model';
+import { IncomeEvent } from '../../core/models/income.model';
 import { MONEY_FALLBACK } from '../../core/fallbacks/money.fallback';
 import { MoneyApiService } from '../../core/services/money-api.service';
 import { BudgetsApiService } from '../../core/services/budgets-api.service';
@@ -196,6 +197,26 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
             </div>
           }
         </div>
+      </section>
+
+      <section class="surface-card compact-card">
+        <div class="card-head"><h2 class="section-card-title">Ingresos recientes</h2></div>
+        @if (incomeEventsLoading()) {
+          <p class="section-card-copy">Cargando ingresos…</p>
+        } @else if (incomeEventsError()) {
+          <p class="section-card-copy">No se pudieron cargar los ingresos recientes.</p>
+        } @else {
+          <div class="list-card">
+            @for (income of recentIncomeEvents(); track income.id) {
+              <div class="list-row payment-row">
+                <div><strong>{{ incomeEventLabel(income) }}</strong><p class="card-meta">{{ incomeTypeLabel(income.type) }} · {{ formatDate(income.incomeDate) }}</p></div>
+                <strong class="value-green">+{{ incomeAmount(income) | appCurrency }}</strong>
+              </div>
+            } @empty {
+              <p class="section-card-copy">Aún no has registrado ingresos.</p>
+            }
+          </div>
+        }
       </section>
 
       <section class="surface-card compact-card savings-card">
@@ -547,6 +568,9 @@ export class MoneyPage {
   protected readonly tabs = [{ id: 'budget' as const, label: 'Presupuesto' }, { id: 'debt' as const, label: 'Deuda' }, { id: 'saving' as const, label: 'Ahorro' }];
   protected readonly debts = signal<DebtApi[]>([]);
   protected readonly goals = signal<SavingsGoalApi[]>([]);
+  protected readonly recentIncomeEvents = signal<IncomeEvent[]>([]);
+  protected readonly incomeEventsLoading = signal(true);
+  protected readonly incomeEventsError = signal(false);
   protected readonly debtStrategyLabel = debtStrategyLabel;
   protected readonly oneDecimalPercent = oneDecimalPercent;
   protected readonly roundedPercent = roundedPercent;
@@ -565,7 +589,16 @@ export class MoneyPage {
 
   constructor() {
     this.loadMoneyView();
-    this.quickCreateEvents.moneyChanged$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadMoneyView());
+    this.loadRecentIncomeEvents();
+    this.quickCreateEvents.moneyChanged$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((change) => change === 'income' ? this.loadRecentIncomeEvents() : this.loadMoneyView());
+  }
+
+  private loadRecentIncomeEvents(): void {
+    this.incomeEventsLoading.set(true);
+    this.incomeApi.getEvents({ limit: 5 }).pipe(finalize(() => this.incomeEventsLoading.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (events) => { this.incomeEventsError.set(false); this.recentIncomeEvents.set(events); },
+      error: () => { this.incomeEventsError.set(true); this.recentIncomeEvents.set([]); },
+    });
   }
 
   private loadMoneyView(): void {
@@ -639,5 +672,8 @@ export class MoneyPage {
   protected goalProgress(goal: SavingsGoalApi) { return savingsProgressPercent(goal.currentAmount ?? goal.current, goal.targetAmount ?? goal.target); }
   protected goalRemaining(goal: SavingsGoalApi) { return savingsRemainingAmount(goal.currentAmount ?? goal.current, goal.targetAmount ?? goal.target); }
   protected goalExcess(goal: SavingsGoalApi) { return savingsExcessAmount(goal.currentAmount ?? goal.current, goal.targetAmount ?? goal.target); }
+  protected incomeEventLabel(income: IncomeEvent) { return income.incomeSource?.name ?? (income.source && income.source !== 'manual' ? income.source : 'Ingreso manual'); }
+  protected incomeAmount(income: IncomeEvent) { return toNumber(income.amount); }
+  protected incomeTypeLabel(type: IncomeEvent['type']) { return ({ regular: 'Regular', extra: 'Extra', adjustment: 'Ajuste', other: 'Otro' })[type]; }
   protected formatDate(value: string) { return new Intl.DateTimeFormat('es-MX', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(`${value.slice(0, 10)}T12:00:00`)); }
 }

@@ -54,6 +54,7 @@ const ACTION_TITLES: Record<QuickAction, string> = {
             </label>
           }
           @case ('income') {
+            <p class="notice">Este registro aparecerá en Ingresos recientes de Dinero. No cambia tu ingreso configurado ni tu presupuesto.</p>
             <label>Fuente (opcional)
               <select formControlName="sourceId"><option value="">Sin fuente</option>@for (source of incomeSources(); track source.id) { <option [value]="source.id">{{ source.name }}</option> }</select>
             </label>
@@ -216,7 +217,7 @@ export class QuickCreate implements OnInit {
         break;
       case 'income':
         request = this.incomeApi.createEvent({ sourceId: value.sourceId || undefined, amount, incomeDate: value.date, type: value.type, note: value.note || undefined });
-        message = 'Ingreso guardado.';
+        message = `Ingreso de ${new AppCurrencyPipe().transform(amount)} registrado.`;
         break;
       case 'debt-payment':
         request = this.debtsApi.createPayment(value.targetId!, { amount, paymentDate: value.date, type: value.type, note: value.note || undefined });
@@ -242,7 +243,7 @@ export class QuickCreate implements OnInit {
         this.form.reset({ date: today() });
         this.created.emit(message);
       },
-      error: () => this.error.set('No se pudo guardar. Intenta de nuevo.'),
+      error: (error: unknown) => this.error.set(action === 'income' ? incomeSaveError(error) : 'No se pudo guardar. Intenta de nuevo.'),
     });
   }
 
@@ -292,4 +293,15 @@ export class QuickCreate implements OnInit {
 function today(): string {
   const date = new Date();
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function incomeSaveError(error: unknown): string {
+  const response = (error as { error?: { message?: string | string[] } })?.error?.message;
+  const message = Array.isArray(response) ? response[0] : response;
+  if (!message) return 'No se pudo registrar el ingreso. Intenta de nuevo.';
+  if (message.includes('amount')) return 'El monto del ingreso debe ser mayor que 0.';
+  if (message.includes('incomeDate')) return 'Ingresa una fecha válida.';
+  if (message.includes('type')) return 'Selecciona un tipo de ingreso válido.';
+  if (message.includes('Income source not found')) return 'La fuente seleccionada ya no está disponible.';
+  return `No se pudo registrar el ingreso: ${message}`;
 }
