@@ -1,11 +1,12 @@
 import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
 import { MoneyCategoryStatus } from '../../core/models/money.model';
 import { DebtApi } from '../../core/models/debts.model';
 import { SavingsGoalApi } from '../../core/models/savings.model';
 import { IncomeEvent } from '../../core/models/income.model';
+import { FinancialGuidance } from '../../core/models/financial-guidance.model';
 import { MONEY_FALLBACK } from '../../core/fallbacks/money.fallback';
 import { MoneyApiService } from '../../core/services/money-api.service';
 import { BudgetsApiService } from '../../core/services/budgets-api.service';
@@ -29,7 +30,7 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
 
 @Component({
   selector: 'app-money-page',
-  imports: [ActionModal, AppCurrencyPipe, BudgetManager, CategoryManager, DebtsManager, QuickCreate, RecurringPaymentsManager, RouterLink, SavingsManager],
+  imports: [ActionModal, AppCurrencyPipe, BudgetManager, CategoryManager, DebtsManager, QuickCreate, RecurringPaymentsManager, SavingsManager],
   template: `
     <div class="page-stack">
       <header class="page-header">
@@ -55,32 +56,26 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
       </section>
 
       @if (activeTab() === 'budget') {
-      @if (paycheck.income > 0) {
-      <section class="surface-card money-hero">
-        <p class="card-label">Libre real estimado</p>
-        <strong class="hero-amount">{{ freeEstimate | appCurrency }}</strong>
-        <p class="hero-note">Después de apartar pagos fijos y necesidades básicas.</p>
-
-        <div class="summary-grid">
-          <div>
-            <p class="card-meta">Ingreso configurado</p>
-            <strong>{{ paycheck.income | appCurrency }}</strong>
+      @if (guidanceLoading()) {
+        <section class="surface-card loading-state" role="status">Calculando disponibilidad…</section>
+      } @else if (guidance(); as financial) {
+        <section class="surface-card money-hero">
+          <p class="card-label">Disponible después de compromisos</p>
+          <strong class="hero-amount" [class.hero-amount--negative]="financial.available < 0">{{ financial.available | appCurrency }}</strong>
+          <p class="hero-note">Ingreso del periodo menos gastos, compromisos próximos y pagos mínimos de deuda.</p>
+          <div class="summary-grid">
+            <div><p class="card-meta">Ingreso del periodo</p><strong>{{ financial.income | appCurrency }}{{ financial.incomeIsEstimated ? ' estimado' : '' }}</strong></div>
+            <div><p class="card-meta">Gastado</p><strong>{{ financial.expenses | appCurrency }}</strong></div>
+            <div><p class="card-meta">Compromisos próximos</p><strong>{{ financial.obligations | appCurrency }}</strong></div>
+            <div><p class="card-meta">Mínimos de deuda</p><strong>{{ financial.debtMinimums | appCurrency }}</strong></div>
+            <div><p class="card-meta">Presupuesto restante</p><strong>{{ financial.budget ? (financial.budget.remaining | appCurrency) : 'Sin presupuesto' }}</strong></div>
           </div>
-          <div>
-            <p class="card-meta">Presupuesto asignado</p>
-            <strong>{{ budgetedTotal | appCurrency }}</strong>
-          </div>
-        </div>
-
-        <div class="progress-track progress-track--large" aria-hidden="true">
-          <span class="progress-fill progress-fill--green" [style.width.%]="reservedPercent"></span>
-        </div>
-
-      </section>
+          <p class="card-meta">El presupuesto restante se mantiene separado y no se resta otra vez del disponible.</p>
+        </section>
       } @else {
         <section class="surface-card empty-state">
-          <strong>Aún no has configurado tus ingresos.</strong>
-          <a class="card-link" routerLink="/onboarding">Configurar ahora</a>
+          <strong>No pudimos calcular tu disponibilidad.</strong>
+          <p class="section-card-copy">Tus registros financieros siguen disponibles abajo.</p>
         </section>
       }
 
@@ -286,15 +281,16 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
             <strong class="hero-amount">{{ savingsCurrent() | appCurrency }}</strong>
             <p class="hero-note">Meta combinada de {{ savingsTarget() | appCurrency }} en todas tus metas.</p>
             <div class="progress-track"><span class="progress-fill progress-fill--green" [style.width.%]="savingsProgress()"></span></div>
-            <div class="summary-grid debt-summary"><div><p class="card-meta">Aporte mensual</p><strong>{{ savingsMonthly() ? (savingsMonthly() | appCurrency) : '—' }}</strong></div><div><p class="card-meta">Avance total</p><strong class="value-green">{{ roundedPercent(savingsProgress()) }}%</strong></div></div>
+            <div class="summary-grid debt-summary"><div><p class="card-meta">Sugerencia mensual</p><strong>{{ savingsMonthly() ? (savingsMonthly() | appCurrency) : '—' }}</strong></div><div><p class="card-meta">Avance total</p><strong class="value-green">{{ roundedPercent(savingsProgress()) }}%</strong></div></div>
           </section>
           <section class="section-block">
             <div class="section-heading"><h2>Metas de ahorro</h2><button class="card-link button-link" type="button" (click)="modal.set('saving')">＋ Agregar</button></div>
             @for (goal of goals(); track goal.id) {
               <article class="surface-card goal-card">
                 <div class="split-line"><div><strong>{{ goal.name }}</strong>@if (goal.targetDate) { <p class="card-meta">Meta {{ formatDate(goal.targetDate) }}</p> }</div><span class="status-badge status-badge--purple">{{ goalAmountsAreValid(goal) ? roundedPercent(goalProgress(goal)) + '%' : '—' }}</span></div>
-                <div class="split-line goal-values"><span>{{ goalCurrent(goal) | appCurrency }} / {{ goalTarget(goal) | appCurrency }}</span>@if (goal.monthlyContribution) { <span>{{ goalMonthly(goal) | appCurrency }}/mes</span> }</div>
+                <div class="split-line goal-values"><span>{{ goalCurrent(goal) | appCurrency }} / {{ goalTarget(goal) | appCurrency }}</span>@if (goalMonthly(goal); as suggested) { <span>Sugerencia: {{ suggested | appCurrency }}/mes</span> }</div>
                 <div class="progress-track"><span class="progress-fill progress-fill--purple" [style.width.%]="goalProgress(goal)"></span></div>
+                @if (goalMonthly(goal)) { <p class="card-meta">Para llegar a tu meta en la fecha elegida.</p> }
                 @if (!goalAmountsAreValid(goal)) {
                   <p class="card-meta">Datos de la meta inconsistentes.</p>
                 } @else if (goalCurrent(goal) >= goalTarget(goal)) {
@@ -368,6 +364,7 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
       color: var(--color-green);
     }
     .hero-amount--white { color: var(--color-text); }
+    .hero-amount--negative { color: var(--color-red); }
     .value-green { color: var(--color-green); }
 
     .hero-note,
@@ -541,7 +538,6 @@ import { catchError, finalize, forkJoin, map, of, tap } from 'rxjs';
     .payoff, .goal-values { color: var(--color-text-secondary); font-size: .82rem; }
     .payoff strong { color: var(--color-text); }
     .goal-card > .card-meta strong { color: var(--color-text); }
-
     @media (max-width: 380px) {
       .summary-grid {
         grid-template-columns: 1fr;
@@ -560,6 +556,7 @@ export class MoneyPage {
   private readonly recurringApi = inject(RecurringPaymentsApiService);
   private readonly quickCreateEvents = inject(QuickCreateEventsService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly route = inject(ActivatedRoute);
   protected readonly apiError = signal(false);
   protected readonly loading = signal(true);
   protected readonly modal = signal<'payment' | 'debt' | 'saving' | 'expense' | 'category' | 'budget' | null>(null);
@@ -571,6 +568,8 @@ export class MoneyPage {
   protected readonly recentIncomeEvents = signal<IncomeEvent[]>([]);
   protected readonly incomeEventsLoading = signal(true);
   protected readonly incomeEventsError = signal(false);
+  protected readonly guidance = signal<FinancialGuidance | null>(null);
+  protected readonly guidanceLoading = signal(true);
   protected readonly debtStrategyLabel = debtStrategyLabel;
   protected readonly oneDecimalPercent = oneDecimalPercent;
   protected readonly roundedPercent = roundedPercent;
@@ -588,9 +587,17 @@ export class MoneyPage {
   protected closeDebt() { this.modal.set(null); this.selectedDebt.set(null); }
 
   constructor() {
+    const requestedTab = this.route.snapshot.queryParamMap.get('tab');
+    if (requestedTab === 'budget' || requestedTab === 'debt' || requestedTab === 'saving') this.activeTab.set(requestedTab);
     this.loadMoneyView();
     this.loadRecentIncomeEvents();
-    this.quickCreateEvents.moneyChanged$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((change) => change === 'income' ? this.loadRecentIncomeEvents() : this.loadMoneyView());
+    this.loadGuidance();
+    this.quickCreateEvents.moneyChanged$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((change) => { if (change === 'income') this.loadRecentIncomeEvents(); else this.loadMoneyView(); this.loadGuidance(); });
+  }
+
+  private loadGuidance(): void {
+    this.guidanceLoading.set(true);
+    this.moneyApi.getGuidance().pipe(finalize(() => this.guidanceLoading.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({ next: (guidance) => this.guidance.set(guidance), error: () => this.guidance.set(null) });
   }
 
   private loadRecentIncomeEvents(): void {
@@ -612,14 +619,6 @@ export class MoneyPage {
   }
 
   protected get budgetedTotal(): number { return this.categories.reduce((total, category) => total + category.limit, 0); }
-
-  protected get freeEstimate(): number {
-    return this.paycheck.income - this.budgetedTotal;
-  }
-
-  protected get reservedPercent(): number {
-    return this.getProgressPercent(this.budgetedTotal, this.paycheck.income);
-  }
 
   protected getProgressPercent(used: number, limit: number): number {
     if (!Number.isFinite(used) || !Number.isFinite(limit) || limit <= 0) {
@@ -656,7 +655,7 @@ export class MoneyPage {
   protected readonly debtProgress = computed(() => this.getProgressPercent(this.debtPaid(), this.debtOriginal()));
   protected readonly savingsCurrent = computed(() => this.goals().reduce((sum, goal) => sum + this.goalCurrent(goal), 0));
   protected readonly savingsTarget = computed(() => this.goals().reduce((sum, goal) => sum + this.goalTarget(goal), 0));
-  protected readonly savingsMonthly = computed(() => this.goals().reduce((sum, goal) => sum + Number(goal.monthlyContribution ?? 0), 0));
+  protected readonly savingsMonthly = computed(() => this.goals().reduce((sum, goal) => sum + Number(goal.monthlySuggestedAmount ?? 0), 0));
   protected readonly savingsProgress = computed(() => this.getProgressPercent(this.savingsCurrent(), this.savingsTarget()));
   protected debtBalance(debt: DebtApi) { return Number(debt.currentAmount ?? debt.remainingAmount ?? debt.balance ?? 0); }
   protected debtMinimumOf(debt: DebtApi) { return Number(debt.minimumPayment ?? debt.nextPaymentAmount ?? 0); }
@@ -667,7 +666,7 @@ export class MoneyPage {
   protected debtDue(debt: DebtApi) { return debt.nextPaymentDate ? `Vence ${this.formatDate(debt.nextPaymentDate)}` : debt.paymentDay ? `Vence el día ${debt.paymentDay}` : 'Sin fecha de pago'; }
   protected goalCurrent(goal: SavingsGoalApi) { return Math.max(0, toNumber(goal.currentAmount ?? goal.current)); }
   protected goalTarget(goal: SavingsGoalApi) { return Math.max(0, toNumber(goal.targetAmount ?? goal.target)); }
-  protected goalMonthly(goal: SavingsGoalApi) { return Number(goal.monthlyContribution ?? 0); }
+  protected goalMonthly(goal: SavingsGoalApi) { return toNumber(goal.monthlySuggestedAmount); }
   protected goalAmountsAreValid(goal: SavingsGoalApi) { return savingsAmountsAreValid(goal.currentAmount ?? goal.current, goal.targetAmount ?? goal.target); }
   protected goalProgress(goal: SavingsGoalApi) { return savingsProgressPercent(goal.currentAmount ?? goal.current, goal.targetAmount ?? goal.target); }
   protected goalRemaining(goal: SavingsGoalApi) { return savingsRemainingAmount(goal.currentAmount ?? goal.current, goal.targetAmount ?? goal.target); }

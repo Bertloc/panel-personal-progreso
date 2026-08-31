@@ -7,6 +7,7 @@ export interface SavingsGoalApi {
   targetAmount?: string | number; target?: string | number; targetDate?: string | null; priority?: string;
   status?: SavingGoalStatus | string; progressPercent?: number; remainingAmount?: number; notes?: string | null;
   monthlyContribution?: string | number | null;
+  monthlySuggestedAmount?: string | number | null;
 }
 export interface SavingsMovementApi { id: string; goalId?: string; amount: string | number; movementDate?: string; type?: SavingsMovementType; note?: string | null; date?: string; createdAt?: string; }
 export type CreateSavingsGoalPayload = ApiPayload;

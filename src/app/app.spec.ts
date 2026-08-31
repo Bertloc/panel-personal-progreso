@@ -42,9 +42,16 @@ const authStub = {
   getAccessToken: () => Promise.resolve(accessToken), logout: () => Promise.resolve(), whenReady: () => Promise.resolve(),
 };
 const apiUrl = (path = '') => `${API_BASE_URL}${path}`;
-const flushHomeSecondary = (http: HttpTestingController) => {
+const guidanceFixture = (overrides: Record<string, unknown> = {}) => ({
+  mode: 'adjusted', period: { startDate: '2026-08-01', endDate: '2026-08-31', remainingDays: 12 }, income: 10000, incomeIsEstimated: false,
+  expenses: 2000, budget: { total: 6000, used: 2400, remaining: 3600 }, obligations: 1000, debtMinimums: 500, available: 6500,
+  dailySafeAmount: 300, calculation: { formula: 'income - expenses - upcoming_obligations - debt_minimums', budgetLimitsSubtracted: false },
+  recommendations: [{ type: 'budget', priority: 'primary', reason: 'daily_budget', amount: 300 }], warnings: [], ...overrides,
+});
+const flushHomeSecondary = (http: HttpTestingController, guidance = guidanceFixture()) => {
   http.expectOne(apiUrl('/routines/summary')).flush({ today: { total: 0, done: 0, pending: 0, completionPercent: 0 }, week: { activeDays: 0, completedDays: 0, completionPercent: 0 }, streak: { current: 0, best: 0 } });
   http.expectOne(apiUrl('/projects/summary')).flush({ total: 0, active: 0, planned: 0, paused: 0, completed: 0, cancelled: 0, archived: 0, nearCompletion: 0, upcomingTasks: [] });
+  http.expectOne(apiUrl('/money/guidance')).flush(guidance);
 };
 
 describe('App', () => {
@@ -384,11 +391,78 @@ describe('App', () => {
     TestBed.createComponent(HomePage);
     const http = TestBed.inject(HttpTestingController);
     http.expectOne(apiUrl('/dashboard/summary')).flush({ budgetRemaining: 700 });
-    http.expectOne(apiUrl('/routines/summary')).flush({ today: { total: 0, done: 0, pending: 0, completionPercent: 0 }, week: { activeDays: 0, completedDays: 0, completionPercent: 0 }, streak: { current: 0, best: 0 } });
+    flushHomeSecondary(http);
 
     TestBed.inject(QuickCreateEventsService).notifyMoneyChanged('income');
 
     http.expectOne(apiUrl('/dashboard/summary')).flush({ budgetRemaining: 700, availableToday: 4730 });
+    http.expectOne(apiUrl('/money/guidance')).flush(guidanceFixture({ available: 4730 }));
+  });
+
+  it.each([
+    {
+      name: 'adjusted',
+      guidance: guidanceFixture({ recommendations: [{ type: 'budget', priority: 'primary', reason: 'category_near_limit', entityName: 'Comida', percent: 84 }] }),
+      text: 'Cuida Comida', href: '/money', explanation: 'modo Ajustado',
+    },
+    {
+      name: 'flexible',
+      guidance: guidanceFixture({ mode: 'flexible', available: 2400, recommendations: [{ type: 'cashflow', priority: 'primary', reason: 'unassigned_margin', amount: 2400 }] }),
+      text: 'Tienes margen sin asignar', href: '/money', explanation: 'modo Flexible',
+    },
+    {
+      name: 'debt_aggressive',
+      guidance: guidanceFixture({ mode: 'debt_aggressive', recommendations: [{ type: 'debt', priority: 'primary', reason: 'priority_debt', entityName: 'Tarjeta', amount: 1800 }] }),
+      text: 'Prioriza Tarjeta', href: '/money?tab=debt', explanation: 'modo Pagar deuda',
+    },
+    {
+      name: 'saving_aggressive',
+      guidance: guidanceFixture({ mode: 'saving_aggressive', recommendations: [{ type: 'saving', priority: 'primary', reason: 'target_date', entityName: 'Viaje', amount: 2800 }] }),
+      text: 'Aparta $2,800 para Viaje', href: '/money?tab=saving', explanation: 'modo Ahorrar',
+    },
+  ])('should render the $name guidance with its supported destination', ({ guidance, text, href, explanation }) => {
+    const fixture = TestBed.createComponent(HomePage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(apiUrl('/dashboard/summary')).flush({});
+    flushHomeSecondary(http, guidance);
+    fixture.detectChanges();
+
+    const card: HTMLElement = fixture.nativeElement.querySelector('.guidance-card');
+    const link: HTMLAnchorElement = card.querySelector('.card-link')!;
+    expect(card.textContent).toContain(text);
+    expect(card.textContent).toContain(explanation);
+    expect(link.getAttribute('href')).toBe(href);
+  });
+
+  it('should show negative guidance without hiding the amount', () => {
+    const fixture = TestBed.createComponent(HomePage);
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne(apiUrl('/dashboard/summary')).flush({});
+    flushHomeSecondary(http, guidanceFixture({ available: -900, recommendations: [{ type: 'warning', priority: 'primary', reason: 'commitments_exceed_income', amount: 900 }] }));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.guidance-card').textContent).toContain('superan tu ingreso disponible por $900');
+  });
+
+  it('should handle guidance loading, errors, and an empty recommendation list', () => {
+    const fixture = TestBed.createComponent(HomePage);
+    const http = TestBed.inject(HttpTestingController);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('hacer ahora');
+
+    http.expectOne(apiUrl('/dashboard/summary')).flush({});
+    http.expectOne(apiUrl('/routines/summary')).flush({ today: {}, week: {}, streak: {} });
+    http.expectOne(apiUrl('/projects/summary')).flush({ upcomingTasks: [] });
+    http.expectOne(apiUrl('/money/guidance')).flush({ message: 'unavailable' }, { status: 503, statusText: 'Unavailable' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('No pudimos calcular una sugerencia');
+
+    fixture.destroy();
+    const emptyFixture = TestBed.createComponent(HomePage);
+    http.expectOne(apiUrl('/dashboard/summary')).flush({});
+    flushHomeSecondary(http, guidanceFixture({ recommendations: [] }));
+    emptyFixture.detectChanges();
+    expect(emptyFixture.nativeElement.querySelector('.guidance-card')).toBeNull();
   });
 
   it('should show a clear monthly summary without the unexplained availableToday value', () => {
@@ -662,6 +736,7 @@ describe('App', () => {
     http.expectOne((request) => request.url === apiUrl('/income/events') && request.params.get('limit') === '5').flush([
       { id: 'income-1', amount: 5000, incomeDate: '2026-08-30', type: 'regular', source: 'manual' },
     ]);
+    http.expectOne(apiUrl('/money/guidance')).flush(guidanceFixture());
 
     fixture.componentInstance['activeTab'].set('debt');
     fixture.detectChanges();
@@ -691,10 +766,11 @@ describe('App', () => {
     http.expectOne(apiUrl('/money/expenses')).flush([]);
     http.expectOne(apiUrl('/budgets/current')).flush({ current: null, limits: [], summary: null });
     http.expectOne(apiUrl('/debts')).flush([updatedDebt]);
-    http.expectOne(apiUrl('/savings/goals')).flush([{ id: 'goal-1', name: 'Viaje', currentAmount: 300, targetAmount: 1000, progressPercent: 100, status: 'active' }]);
+    http.expectOne(apiUrl('/savings/goals')).flush([{ id: 'goal-1', name: 'Viaje', currentAmount: 300, targetAmount: 1000, progressPercent: 100, monthlySuggestedAmount: 200, status: 'active' }]);
     http.expectOne(apiUrl('/settings')).flush({});
     http.expectOne(apiUrl('/income/sources')).flush([]);
     http.expectOne(apiUrl('/recurring-payments')).flush([]);
+    http.expectOne(apiUrl('/money/guidance')).flush(guidanceFixture());
     fixture.detectChanges();
     expect(fixture.componentInstance['activeTab']()).toBe('debt');
     expect(fixture.nativeElement.querySelector('app-debts-manager')).toBeNull();
@@ -711,6 +787,8 @@ describe('App', () => {
     expect(fixture.nativeElement.textContent).toContain('Viaje');
     expect(fixture.nativeElement.textContent).toContain('30%');
     expect(fixture.nativeElement.textContent).toContain('Faltan $700');
+    expect(fixture.nativeElement.textContent).toContain('Sugerencia: $200/mes');
+    expect(fixture.nativeElement.textContent).toContain('Para llegar a tu meta en la fecha elegida.');
     expect(fixture.nativeElement.textContent).not.toContain('100%');
     button('＋ Agregar').click();
     fixture.detectChanges();
@@ -727,6 +805,7 @@ describe('App', () => {
     http.expectOne((request) => request.url === apiUrl('/income/events') && request.params.get('limit') === '5').flush([
       { id: 'income-2', amount: 700, incomeDate: '2026-08-30', type: 'extra', source: 'manual' },
     ]);
+    http.expectOne(apiUrl('/money/guidance')).flush(guidanceFixture({ income: 10700, available: 7200 }));
     http.expectNone(apiUrl('/income/sources'));
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Extra');

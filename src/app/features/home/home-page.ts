@@ -13,6 +13,8 @@ import { QuickCreateEventsService } from '../../core/services/quick-create-event
 import { RoutineEventsService } from '../../core/services/routine-events.service';
 import { RoutinesApiService } from '../../core/services/routines-api.service';
 import { ProjectsApiService } from '../../core/services/projects-api.service';
+import { MoneyApiService } from '../../core/services/money-api.service';
+import { FinancialGuidance, GuidanceRecommendation } from '../../core/models/financial-guidance.model';
 import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
 
 @Component({
@@ -29,6 +31,33 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
 
       @if (apiError()) {
         <p class="api-error" role="status">No pudimos cargar tu resumen. Tus datos guardados no se modificaron.</p>
+      }
+
+      @if (guidanceLoading()) {
+        <section class="surface-card guidance-card" role="status">Calculando qué hacer ahora…</section>
+      } @else if (guidanceError()) {
+        <section class="surface-card guidance-card"><h2 class="section-card-title">Qué hacer ahora</h2><p class="section-card-copy">No pudimos calcular una sugerencia con tus datos actuales.</p></section>
+      } @else if (primaryRecommendation(); as recommendation) {
+        <section class="surface-card guidance-card">
+          <p class="card-label">Qué hacer ahora</p>
+          @switch (recommendation.reason) {
+            @case ('commitments_exceed_income') { <h2 class="section-card-title">Revisa tus compromisos</h2><p class="section-card-copy">Tus compromisos estimados superan tu ingreso disponible por {{ recommendation.amount | appCurrency }}.</p> }
+            @case ('category_near_limit') { <h2 class="section-card-title">Cuida {{ recommendation.entityName }}</h2><p class="section-card-copy">Has utilizado {{ recommendation.percent }}% de su presupuesto.</p> }
+            @case ('category_exceeded') { <h2 class="section-card-title">Revisa {{ recommendation.entityName }}</h2><p class="section-card-copy">Esta categoría ya superó su presupuesto.</p> }
+            @case ('daily_budget') { <h2 class="section-card-title">Mantén tu presupuesto</h2><p class="section-card-copy">Procura no superar aproximadamente {{ recommendation.amount | appCurrency }} por día durante este periodo.</p> }
+            @case ('upcoming_obligations') { <h2 class="section-card-title">Reserva tus próximos pagos</h2><p class="section-card-copy">Tienes {{ recommendation.amount | appCurrency }} en compromisos próximos registrados.</p> }
+            @case ('unassigned_margin') { <h2 class="section-card-title">Tienes margen sin asignar</h2><p class="section-card-copy">Después de tus compromisos tienes {{ recommendation.amount | appCurrency }} sin asignar.</p> }
+            @case ('priority_debt') { <h2 class="section-card-title">Prioriza {{ recommendation.entityName }}</h2><p class="section-card-copy">Podrías aplicar hasta {{ recommendation.amount | appCurrency }} como pago adicional, sin superar su saldo.</p> }
+            @case ('no_extra_margin') { <h2 class="section-card-title">Mantén el pago de {{ recommendation.entityName }}</h2><p class="section-card-copy">Ahora no hay margen estimado para recomendar un pago adicional.</p> }
+            @case ('target_date') { <h2 class="section-card-title">Aparta {{ recommendation.amount | appCurrency }} para {{ recommendation.entityName }}</h2>@if (recommendation.shortfall) { <p class="section-card-copy">La meta requiere ese monto este mes, pero después de tus compromisos tienes {{ guidance()?.available | appCurrency }} disponibles.</p> } @else { <p class="section-card-copy">Para acercarte a la meta en la fecha elegida.</p> } }
+            @case ('target_date_missing') { <h2 class="section-card-title">Agrega fecha a {{ recommendation.entityName }}</h2><p class="section-card-copy">Así podremos calcular cuánto apartar por periodo.</p> }
+            @case ('no_active_debt') { <h2 class="section-card-title">No tienes deuda activa</h2><p class="section-card-copy">El modo Pagar deuda no tiene una deuda sobre la cual orientar una acción.</p> }
+            @case ('no_active_goal') { <h2 class="section-card-title">Crea una meta de ahorro</h2><p class="section-card-copy">Agrega una meta con fecha objetivo para recibir una sugerencia.</p> }
+            @default { <h2 class="section-card-title">Configura tu presupuesto</h2><p class="section-card-copy">Necesitamos un presupuesto activo para calcular un límite diario.</p> }
+          }
+          <p class="guidance-why">{{ guidanceExplanation() }}</p>
+          <a class="card-link" [routerLink]="guidanceRoute(recommendation)" [queryParams]="guidanceQuery(recommendation)">{{ guidanceCta(recommendation) }} →</a>
+        </section>
       }
 
       @if (loading()) {
@@ -124,6 +153,8 @@ import { AppCurrencyPipe } from '../../shared/pipes/app-currency.pipe';
     .metric-icon--orange { color: var(--color-orange); } .metric-icon--green { color: var(--color-green); } .metric-icon--red { color: var(--color-red); }
     .value-green { color: var(--color-green); }
     .setup-card { display: grid; gap: 12px; background: linear-gradient(180deg, rgb(35 29 65 / .7), var(--color-card)); }
+    .guidance-card { display: grid; gap: 11px; border-color: rgb(124 109 255 / .3); background: radial-gradient(circle at top right, rgb(124 109 255 / .14), transparent 44%), var(--color-card); }
+    .guidance-why { margin: 0; color: var(--color-text-secondary); font-size: .78rem; }
     .routine-card { display: grid; gap: 12px; }
     .api-error { margin: 0; padding: 12px 14px; border-radius: 14px; background: rgb(255 77 109 / .12); color: var(--color-red); }
     .loading-state { color: var(--color-text-secondary); text-align: center; }
@@ -140,6 +171,7 @@ export class HomePage {
   private readonly events = inject(QuickCreateEventsService);
   private readonly routinesApi = inject(RoutinesApiService);
   private readonly projectsApi = inject(ProjectsApiService);
+  private readonly moneyApi = inject(MoneyApiService);
   private readonly routineEvents = inject(RoutineEventsService);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly apiError = signal(false);
@@ -151,13 +183,18 @@ export class HomePage {
   protected readonly routineError = signal(false);
   protected readonly projectSummary = signal<ProjectsSummary | null>(null);
   protected readonly projectError = signal(false);
+  protected readonly guidance = signal<FinancialGuidance | null>(null);
+  protected readonly guidanceLoading = signal(true);
+  protected readonly guidanceError = signal(false);
+  protected readonly primaryRecommendation = computed(() => this.guidance()?.recommendations.find(({ priority }) => priority === 'primary') ?? null);
   protected readonly today = new Intl.DateTimeFormat('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date()).toUpperCase();
 
   constructor() {
     this.loadSummary();
     this.loadRoutineSummary();
     this.loadProjectSummary();
-    this.events.moneyChanged$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadSummary());
+    this.loadGuidance();
+    this.events.moneyChanged$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => { this.loadSummary(); this.loadGuidance(); });
     this.routineEvents.changed$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadRoutineSummary());
     this.events.projectChanged$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.loadProjectSummary());
   }
@@ -182,12 +219,24 @@ export class HomePage {
     this.projectsApi.getSummary().pipe(finalize(() => this.projectLoading.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({ next: (summary) => { this.projectError.set(false); this.projectSummary.set(summary); }, error: () => { this.projectError.set(true); this.projectSummary.set(null); } });
   }
 
+  private loadGuidance() {
+    this.guidanceLoading.set(true);
+    this.moneyApi.getGuidance().pipe(finalize(() => this.guidanceLoading.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (guidance) => { this.guidanceError.set(false); this.guidance.set(guidance); },
+      error: () => { this.guidanceError.set(true); this.guidance.set(null); },
+    });
+  }
+
   get homeSummary() { return this.summary(); }
   protected get profileName() { return this.onboarding.status()?.profile?.displayName ?? ''; }
   protected get financialReady() { return this.homeSummary.monthlyLimit > 0; }
   protected get monthlyRemaining() { return Math.max(0, this.homeSummary.monthlyLimit - this.homeSummary.monthlySpent); }
   protected get budgetExceeded() { return this.homeSummary.monthlySpent > this.homeSummary.monthlyLimit; }
   protected get budgetOverage() { return Math.max(0, this.homeSummary.monthlySpent - this.homeSummary.monthlyLimit); }
+  protected guidanceExplanation() { return `Basado en tu modo ${({ adjusted: 'Ajustado', flexible: 'Flexible', debt_aggressive: 'Pagar deuda', saving_aggressive: 'Ahorrar' })[this.guidance()?.mode ?? 'adjusted']} y los datos del periodo.`; }
+  protected guidanceRoute(recommendation: GuidanceRecommendation) { return recommendation.reason === 'no_active_debt' ? '/settings' : '/money'; }
+  protected guidanceQuery(recommendation: GuidanceRecommendation) { return recommendation.type === 'debt' ? { tab: 'debt' } : recommendation.type === 'saving' || recommendation.reason === 'no_active_goal' ? { tab: 'saving' } : recommendation.type === 'setup' ? { tab: 'budget' } : null; }
+  protected guidanceCta(recommendation: GuidanceRecommendation) { return recommendation.reason === 'no_active_debt' ? 'Cambiar modo' : recommendation.type === 'debt' ? 'Ver deuda' : recommendation.type === 'saving' || recommendation.reason === 'no_active_goal' ? 'Ver ahorro' : 'Ver dinero'; }
   protected getProgressPercent(used: number, limit: number) { return limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0; }
   protected getHeatmapClass(value: HomeSummary['heatmap'][number]['value']) { return `heatmap-cell heatmap-cell--${value}`; }
 }

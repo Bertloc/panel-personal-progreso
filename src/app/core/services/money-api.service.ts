@@ -4,11 +4,13 @@ import { map } from 'rxjs';
 import { API_BASE_URL } from '../config/api.config';
 import { ApiResponse, unwrapApiResponse } from '../models/api.model';
 import { CreateCategoryPayload, CreateExpensePayload, ExpenseApi, ExpenseFilters, MoneyCategoryApi, UpdateCategoryPayload, UpdateExpensePayload } from '../models/money.model';
+import { FinancialGuidance } from '../models/financial-guidance.model';
 
 @Injectable({ providedIn: 'root' })
 export class MoneyApiService {
   private readonly http = inject(HttpClient);
   private readonly url = `${API_BASE_URL}/money`;
+  getGuidance() { return this.http.get<ApiResponse<FinancialGuidance>>(`${this.url}/guidance`).pipe(map(unwrapApiResponse)); }
   getCategories(filters: ExpenseFilters = {}) {
     let params = new HttpParams();
     for (const [key, value] of Object.entries(filters)) if (value !== undefined) params = params.set(key, String(value));
